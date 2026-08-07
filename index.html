@@ -45,17 +45,17 @@
     <section class="stage-wrap">
       <div class="stage-head">
         <div><span class="eyebrow">TOP VIEW · HAMMER UNITS</span><h1 id="mapTitle">research_1v1_generated</h1></div>
-        <div class="symmetry-badge"><i></i> 180° rotation locked</div>
+        <div class="stage-actions"><button id="toolsToggle" class="panel-toggle" aria-pressed="false">Hide tools</button><div class="symmetry-badge"><i></i> 180° rotation locked</div></div>
       </div>
       <div class="canvas-shell" id="canvasShell">
         <canvas id="mapCanvas" aria-label="Top-down arena drawing canvas"></canvas>
         <div class="canvas-help" id="canvasHelp">Draw a feature or select one to move and resize it.</div>
         <div class="legend"><span><i class="solid"></i> editable source</span><span><i class="paired"></i> locked partner</span></div>
-        <div class="zoom-controls"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLabel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button></div>
+        <div class="zoom-controls"><button id="panMode" class="pan-view" aria-label="Toggle pan mode" aria-pressed="false">Pan</button><button id="fitView" class="fit-view" aria-label="Fit map to view">Fit</button><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLabel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button></div>
       </div>
       <div class="statusbar">
         <span id="pointerReadout">X 0 · Y 0</span>
-        <span><kbd>Drag</kbd> move · corner handles resize · <kbd>Delete</kbd> removes · <kbd>Esc</kbd> returns to Select</span>
+        <span><kbd>Drag</kbd> move · handles resize · <kbd>Space</kbd> + drag pans · <kbd>Del</kbd> removes · <kbd>Esc</kbd> Select</span>
         <span id="objectCount">1 object</span>
       </div>
     </section>
@@ -74,8 +74,8 @@
           <div class="type-row"><span id="typeBadge" class="type-badge">Wall</span><span id="buildBadge" class="build-badge">Blockout-ready</span></div>
           <label>Name<input id="objectName" spellcheck="false"></label>
           <div class="axis-grid" id="rectFields">
-            <label>X<input id="centerX" type="number"></label><label>Y<input id="centerY" type="number"></label><label>Elevation<input id="centerZ" type="number"></label>
-            <label>Width<input id="sizeX" type="number" min="1"></label><label>Depth<input id="sizeY" type="number" min="1"></label><label>Height<input id="sizeZ" type="number" min="1"></label>
+            <label>X<input id="centerX" type="number" step="16"></label><label>Y<input id="centerY" type="number" step="16"></label><label>Elevation<input id="centerZ" type="number" step="16"></label>
+            <label>Width<input id="sizeX" type="number" min="16" step="32"></label><label>Depth<input id="sizeY" type="number" min="16" step="32"></label><label>Height<input id="sizeZ" type="number" min="16" step="16"></label>
           </div>
           <div class="selection-actions" id="rectActions"><button id="rotateButton" class="button ghost">Rotate 90°</button><button id="duplicateButton" class="button ghost">Duplicate</button></div>
           <div class="pair-note"><span class="pair-swatch"></span><div><strong id="pairTitle">Paired by rotation</strong><small id="pairPosition">Partner at X 0, Y 0</small></div></div>
@@ -85,7 +85,7 @@
 
       <section class="panel">
         <div class="panel-title"><span>CT spawn</span><span class="team ct">CT</span></div>
-        <div class="axis-grid spawn-grid"><label>X<input id="spawnX" type="number"></label><label>Y<input id="spawnY" type="number"></label><label>Yaw<input id="spawnYaw" type="number"></label></div>
+        <div class="axis-grid spawn-grid"><label>X<input id="spawnX" type="number" step="32"></label><label>Y<input id="spawnY" type="number" step="32"></label><label>Yaw<input id="spawnYaw" type="number" step="15"></label></div>
         <p class="muted">Drag either spawn on the canvas. Its opposite spawn stays locked to the 180° rotation.</p>
       </section>
 

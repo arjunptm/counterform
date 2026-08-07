@@ -9,6 +9,7 @@
   const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated"]);
   const RECT_KINDS = new Set([...GENERATOR_KINDS, "water_void", "stairs", "jump"]);
   const ANNOTATION_KINDS = new Set(["measure", "sightline"]);
+  const DEFAULT_GRID = 32;
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
@@ -36,7 +37,7 @@
         ct: { origin: [-768, 0, 16], angles: [0, 0, 0] },
         t: { origin: [768, 0, 16], angles: [0, 180, 0] },
       },
-      sketch_settings: { grid: 32, view_width: 2560, view_height: 1792 },
+      sketch_settings: { grid: DEFAULT_GRID, view_width: 2560, view_height: 1792 },
     };
   }
 
@@ -51,7 +52,47 @@
     };
   }
 
-  function snap(value, grid) { return Math.round(value / grid) * grid; }
+  function cleanNumber(value) {
+    const rounded = Math.round(Number(value) * 1e9) / 1e9;
+    return Object.is(rounded, -0) ? 0 : rounded;
+  }
+
+  function snap(value, grid) { return cleanNumber(Math.round(Number(value) / grid) * grid); }
+
+  function snapRectToGrid(item, spec, grid = Number(spec.sketch_settings?.grid || DEFAULT_GRID)) {
+    if (!item?.center || !item?.size) return item;
+    const symmetry = spec.symmetry.center;
+    const centered = item.editor_kind === "floor" || (
+      item.center[0] === symmetry[0] && item.center[1] === symmetry[1] && item.mirror === false
+    );
+    for (let axis = 0; axis < 2; axis++) {
+      if (centered) {
+        item.center[axis] = symmetry[axis];
+        item.size[axis] = Math.max(2 * grid, snap(item.size[axis], 2 * grid));
+      } else {
+        item.size[axis] = Math.max(grid, snap(item.size[axis], grid));
+        const cellCount = Math.round(item.size[axis] / grid);
+        const centerOffset = cellCount % 2 ? grid / 2 : 0;
+        item.center[axis] = cleanNumber(snap(item.center[axis] - centerOffset, grid) + centerOffset);
+      }
+    }
+    item.mirror = item.editor_kind === "floor" ? false : item.center[0] !== symmetry[0] || item.center[1] !== symmetry[1];
+    return item;
+  }
+
+  function snapSpecToGrid(spec, requestedGrid) {
+    const grid = [16, 32, 64, 128].includes(Number(requestedGrid)) ? Number(requestedGrid) : DEFAULT_GRID;
+    spec.sketch_settings.grid = grid;
+    allElements(spec).forEach((item) => snapRectToGrid(item, spec, grid));
+    (spec.sketch_annotations || []).forEach((item) => {
+      item.start = item.start.map((value) => snap(value, grid));
+      item.end = item.end.map((value) => snap(value, grid));
+    });
+    spec.spawns.ct.origin[0] = snap(spec.spawns.ct.origin[0], grid);
+    spec.spawns.ct.origin[1] = snap(spec.spawns.ct.origin[1], grid);
+    spec.spawns.t = pairedSpawn(spec.spawns.ct, spec.symmetry.center);
+    return spec;
+  }
 
   function slug(value) {
     return String(value || "object").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "object";
@@ -97,7 +138,7 @@
     const atCenter = item.center[0] === spec.symmetry.center[0] && item.center[1] === spec.symmetry.center[1];
     item.mirror = item.editor_kind === "floor" ? false : !atCenter;
     if (["elevated", "bridge", "stairs", "jump"].includes(item.editor_kind)) item.walkable_below = false;
-    return item;
+    return snapRectToGrid(item, spec);
   }
 
   function normalizeSpec(input) {
@@ -110,7 +151,7 @@
     spec.allowed_materials = Array.isArray(spec.allowed_materials) && spec.allowed_materials.length ? spec.allowed_materials : [MATERIAL];
     spec.sketch_elements = Array.isArray(spec.sketch_elements) ? spec.sketch_elements : [];
     spec.sketch_annotations = Array.isArray(spec.sketch_annotations) ? spec.sketch_annotations : [];
-    spec.sketch_settings = Object.assign({ grid: 32, view_width: 2560, view_height: 1792 }, spec.sketch_settings);
+    spec.sketch_settings = Object.assign({ grid: DEFAULT_GRID, view_width: 2560, view_height: 1792 }, spec.sketch_settings);
     const incomingElements = [...spec.geometry, ...spec.sketch_elements].map((item) => normalizeRect(item, spec));
     spec.geometry = [];
     spec.sketch_elements = [];
@@ -121,7 +162,7 @@
       end: [Number(item.end?.[0] || 0), Number(item.end?.[1] || 0)], mirror: item.mirror !== false,
     }));
     spec.spawns.t = pairedSpawn(spec.spawns.ct, spec.symmetry.center);
-    return spec;
+    return snapSpecToGrid(spec, spec.sketch_settings.grid);
   }
 
   function validateDraft(spec) {
@@ -144,14 +185,14 @@
   }
 
   function exportSpec(spec) {
-    const output = clone(spec); output.design_approved = false;
+    const output = snapSpecToGrid(clone(spec), spec.sketch_settings.grid); output.design_approved = false;
     output.spawns.t = pairedSpawn(output.spawns.ct, output.symmetry.center);
     return output;
   }
 
   return {
-    MATERIAL, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, clone, defaultSpec,
-    rotatePoint, pairedSpawn, snap, slug, allElements, allNamed, uniqueName,
+    MATERIAL, DEFAULT_GRID, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, clone, defaultSpec,
+    rotatePoint, pairedSpawn, cleanNumber, snap, snapRectToGrid, snapSpecToGrid, slug, allElements, allNamed, uniqueName,
     findElement, findAnnotation, addElement, removeElement, moveElementBucket,
     normalizeSpec, validateDraft, exportSpec,
   };

@@ -2,6 +2,10 @@
 
 A local-first, rotationally symmetric CS2 arena blockout sketcher.
 
+Canvas geometry snaps to a selectable Hammer-unit grid. Zoom around the pointer,
+then use **Pan**, middle-mouse drag, or Space-drag to navigate; **Fit** restores
+the overview. The tool rail can be hidden when more canvas room is useful.
+
 This public repository is an automated deployment mirror. Its files are
 published from the private map-generation repository and should not be edited
 directly.

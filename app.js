@@ -35,6 +35,8 @@
   let gesture = null;
   let zoom = 1;
   let pan = { x: 0, y: 0 };
+  let panMode = false;
+  let spacePressed = false;
   let history = [];
   let future = [];
 
@@ -90,6 +92,23 @@
     return { x: (clientX - v.rect.left - v.cx) / v.scale + spec.symmetry.center[0], y: -(clientY - v.rect.top - v.cy) / v.scale + spec.symmetry.center[1] };
   }
 
+  function setZoom(nextZoom, clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const focusX = clientX ?? rect.left + rect.width / 2; const focusY = clientY ?? rect.top + rect.height / 2;
+    const anchoredWorld = screenToWorld(focusX, focusY);
+    zoom = Math.max(.55, Math.min(2.4, nextZoom));
+    const anchoredScreen = worldToScreen(anchoredWorld.x, anchoredWorld.y);
+    pan.x += focusX - rect.left - anchoredScreen.x; pan.y += focusY - rect.top - anchoredScreen.y;
+    $("zoomLabel").textContent = `${Math.round(zoom * 100)}%`; draw();
+  }
+
+  function fitView() { zoom = 1; pan = { x: 0, y: 0 }; $("zoomLabel").textContent = "100%"; draw(); }
+
+  function setPanMode(enabled) {
+    panMode = Boolean(enabled); $("panMode").setAttribute("aria-pressed", String(panMode));
+    canvas.style.cursor = panMode || spacePressed ? "grab" : tool === "select" ? "default" : "crosshair";
+  }
+
   function canonicalPoint(point, paired) {
     if (!paired) return [point.x, point.y];
     return Core.rotatePoint([point.x, point.y, 0], spec.symmetry.center).slice(0, 2);
@@ -129,6 +148,7 @@
 
   function drawPattern(item, rect) {
     ctx.save(); ctx.strokeStyle = visuals[item.editor_kind]?.[1] || "#aab5ad"; ctx.globalAlpha = .55; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
     if (item.editor_kind === "water_void") {
       for (let y = rect.y + 8; y < rect.y + rect.h; y += 12) { ctx.beginPath(); ctx.moveTo(rect.x + 5, y); ctx.bezierCurveTo(rect.x + rect.w * .3, y - 4, rect.x + rect.w * .7, y + 4, rect.x + rect.w - 5, y); ctx.stroke(); }
     } else if (item.editor_kind === "stairs") {
@@ -264,11 +284,13 @@
   }
 
   function updateRectPreview(point) {
-    const grid = Number(spec.sketch_settings.grid); const a = gesture.start;
-    const center = [Core.snap((a.x + point.x) / 2, grid), Core.snap((a.y + point.y) / 2, grid), presets[tool].height / 2];
+    const grid = Number(spec.sketch_settings.grid);
+    const start = [Core.snap(gesture.start.x, grid), Core.snap(gesture.start.y, grid)]; const end = [Core.snap(point.x, grid), Core.snap(point.y, grid)];
+    for (let axis = 0; axis < 2; axis++) if (end[axis] === start[axis]) end[axis] += point[axis === 0 ? "x" : "y"] < start[axis] ? -grid : grid;
+    const center = [Core.cleanNumber((start[0] + end[0]) / 2), Core.cleanNumber((start[1] + end[1]) / 2), presets[tool].height / 2];
     if (tool === "water_void") center[2] = -presets[tool].height / 2;
     gesture.preview = {
-      name: "new", center, size: [Math.max(grid, Core.snap(Math.abs(point.x - a.x), grid)), Math.max(grid, Core.snap(Math.abs(point.y - a.y), grid)), presets[tool].height],
+      name: "new", center, size: [Math.max(grid, Math.abs(end[0] - start[0])), Math.max(grid, Math.abs(end[1] - start[1])), presets[tool].height],
       material: spec.allowed_materials[0], mirror: center[0] !== 0 || center[1] !== 0, editor_kind: tool,
       walkable_below: ["bridge", "elevated", "stairs", "jump"].includes(tool) ? false : undefined,
     };
@@ -281,11 +303,11 @@
   }
 
   function setTool(next) {
-    tool = next; gesture = null;
+    tool = next; gesture = null; setPanMode(false);
     document.querySelectorAll("[data-tool]").forEach((button) => button.classList.toggle("active", button.dataset.tool === next));
     const messages = { select: "Click a solid feature, then drag to move or use its corner handles to resize.", spawn: "Click to place CT; drag either spawn later to rearrange it.", measure: "Drag between two points to record their distance.", sightline: "Drag to mark a sightline for later design review." };
     $("canvasHelp").textContent = messages[next] || `Drag to draw ${labels[next].toLowerCase()}. Its rotational partner appears automatically.`;
-    canvas.style.cursor = next === "select" ? "default" : "crosshair";
+    canvas.style.cursor = spacePressed ? "grab" : next === "select" ? "default" : "crosshair";
     draw();
   }
 
@@ -296,6 +318,7 @@
 
   function syncUI() {
     $("mapTitle").textContent = spec.map_name; $("mapName").value = spec.map_name; $("gridSize").value = String(spec.sketch_settings.grid);
+    const grid = Number(spec.sketch_settings.grid); for (const id of ["centerX", "centerY"]) $(id).step = String(grid / 2); for (const id of ["sizeX", "sizeY", "spawnX", "spawnY"]) $(id).step = String(grid);
     $("materialSelect").innerHTML = spec.allowed_materials.map((m) => `<option>${m}</option>`).join("");
     $("spawnX").value = spec.spawns.ct.origin[0]; $("spawnY").value = spec.spawns.ct.origin[1]; $("spawnYaw").value = spec.spawns.ct.angles[1];
     const item = selectedItem(); const hasItem = Boolean(item);
@@ -330,6 +353,11 @@
   }
 
   canvas.addEventListener("pointerdown", (event) => {
+    if (event.button === 1 || spacePressed || panMode) {
+      event.preventDefault(); canvas.setPointerCapture(event.pointerId);
+      gesture = { type: "pan-view", start: [event.clientX, event.clientY], originalPan: { ...pan } };
+      canvas.style.cursor = "grabbing"; return;
+    }
     const point = screenToWorld(event.clientX, event.clientY); canvas.setPointerCapture(event.pointerId);
     if (tool === "select") {
       const current = selectedItem();
@@ -354,15 +382,17 @@
     const point = screenToWorld(event.clientX, event.clientY); $("pointerReadout").textContent = `X ${Math.round(point.x)} · Y ${Math.round(point.y)}`;
     if (!gesture) return;
     const grid = Number(spec.sketch_settings.grid);
-    if (gesture.type === "draw-rect") updateRectPreview(point);
+    if (gesture.type === "pan-view") {
+      pan.x = gesture.originalPan.x + event.clientX - gesture.start[0]; pan.y = gesture.originalPan.y + event.clientY - gesture.start[1]; draw(); return;
+    } else if (gesture.type === "draw-rect") updateRectPreview(point);
     else if (gesture.type === "draw-line") updateLinePreview(point);
     else if (gesture.type === "move-element") {
-      const p = canonicalPoint(point, gesture.paired); gesture.item.center[0] = Core.snap(gesture.original.center[0] + p[0] - gesture.anchor[0], grid); gesture.item.center[1] = Core.snap(gesture.original.center[1] + p[1] - gesture.anchor[1], grid); gesture.item.mirror = gesture.item.center[0] !== 0 || gesture.item.center[1] !== 0; gesture.changed = true;
+      const p = canonicalPoint(point, gesture.paired); const dx = Core.snap(p[0] - gesture.anchor[0], grid); const dy = Core.snap(p[1] - gesture.anchor[1], grid); gesture.item.center[0] = Core.cleanNumber(gesture.original.center[0] + dx); gesture.item.center[1] = Core.cleanNumber(gesture.original.center[1] + dy); gesture.item.mirror = gesture.item.center[0] !== 0 || gesture.item.center[1] !== 0; gesture.changed = true;
     } else if (gesture.type === "resize-element") {
       const p = canonicalPoint(point, gesture.paired); const [screenSx, screenSy] = cornerSigns[gesture.corner];
       const sx = gesture.paired ? -screenSx : screenSx; const sy = gesture.paired ? -screenSy : screenSy;
       if (gesture.item.editor_kind === "floor") { gesture.item.size[0] = Math.max(grid, 2 * Math.abs(Core.snap(p[0] - spec.symmetry.center[0], grid))); gesture.item.size[1] = Math.max(grid, 2 * Math.abs(Core.snap(p[1] - spec.symmetry.center[1], grid))); }
-      else { const opposite = [gesture.original.center[0] - sx * gesture.original.size[0] / 2, gesture.original.center[1] + sy * gesture.original.size[1] / 2]; const moving = [Core.snap(p[0], grid), Core.snap(p[1], grid)]; gesture.item.center[0] = Core.snap((moving[0] + opposite[0]) / 2, grid / 2); gesture.item.center[1] = Core.snap((moving[1] + opposite[1]) / 2, grid / 2); gesture.item.size[0] = Math.max(grid, Math.abs(moving[0] - opposite[0])); gesture.item.size[1] = Math.max(grid, Math.abs(moving[1] - opposite[1])); gesture.item.mirror = gesture.item.center[0] !== 0 || gesture.item.center[1] !== 0; } gesture.changed = true;
+      else { const opposite = [gesture.original.center[0] - sx * gesture.original.size[0] / 2, gesture.original.center[1] + sy * gesture.original.size[1] / 2]; const moving = [Core.snap(p[0], grid), Core.snap(p[1], grid)]; gesture.item.center[0] = Core.cleanNumber((moving[0] + opposite[0]) / 2); gesture.item.center[1] = Core.cleanNumber((moving[1] + opposite[1]) / 2); gesture.item.size[0] = Math.max(grid, Math.abs(moving[0] - opposite[0])); gesture.item.size[1] = Math.max(grid, Math.abs(moving[1] - opposite[1])); Core.snapRectToGrid(gesture.item, spec, grid); } gesture.changed = true;
     } else if (gesture.type === "move-spawn") {
       const p = canonicalPoint(point, gesture.paired); spec.spawns.ct.origin[0] = Core.snap(p[0], grid); spec.spawns.ct.origin[1] = Core.snap(p[1], grid); spec.spawns.t = Core.pairedSpawn(spec.spawns.ct, spec.symmetry.center); gesture.changed = true;
     } else if (gesture.type === "move-annotation") {
@@ -375,6 +405,7 @@
 
   canvas.addEventListener("pointerup", () => {
     if (!gesture) return;
+    if (gesture.type === "pan-view") { gesture = null; canvas.style.cursor = panMode ? "grab" : tool === "select" ? "default" : "crosshair"; return; }
     if (gesture.type === "draw-rect") {
       const item = gesture.preview; if (!item) { gesture = null; return; }
       item.name = Core.uniqueName(spec, presets[item.editor_kind].base); mutate(() => { Core.addElement(spec, item); selection = { type: "element", name: item.name }; selectedPair = false; }); gesture = null; setTool("select");
@@ -385,18 +416,25 @@
     $("canvasHelp").classList.add("hidden");
   });
 
-  canvas.addEventListener("pointercancel", () => { if (gesture?.before) spec = Core.normalizeSpec(JSON.parse(gesture.before)); gesture = null; commit(); });
-  canvas.addEventListener("wheel", (event) => { event.preventDefault(); zoom = Math.max(.55, Math.min(2.4, zoom * (event.deltaY > 0 ? .9 : 1.1))); $("zoomLabel").textContent = `${Math.round(zoom * 100)}%`; draw(); }, { passive: false });
+  canvas.addEventListener("pointercancel", () => { if (gesture?.before) spec = Core.normalizeSpec(JSON.parse(gesture.before)); gesture = null; canvas.style.cursor = panMode ? "grab" : tool === "select" ? "default" : "crosshair"; commit(); });
+  canvas.addEventListener("wheel", (event) => { event.preventDefault(); setZoom(zoom * (event.deltaY > 0 ? .9 : 1.1), event.clientX, event.clientY); }, { passive: false });
 
   document.querySelectorAll("[data-tool]").forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
-  $("zoomIn").onclick = () => { zoom = Math.min(2.4, zoom + .1); $("zoomLabel").textContent = `${Math.round(zoom * 100)}%`; draw(); };
-  $("zoomOut").onclick = () => { zoom = Math.max(.55, zoom - .1); $("zoomLabel").textContent = `${Math.round(zoom * 100)}%`; draw(); };
+  $("zoomIn").onclick = () => setZoom(zoom + .1);
+  $("zoomOut").onclick = () => setZoom(zoom - .1);
+  $("fitView").onclick = fitView;
+  $("panMode").onclick = () => setPanMode(!panMode);
+  $("toolsToggle").onclick = () => { const hidden = document.body.classList.toggle("tools-hidden"); $("toolsToggle").textContent = hidden ? "Show tools" : "Hide tools"; $("toolsToggle").setAttribute("aria-pressed", String(hidden)); requestAnimationFrame(resizeCanvas); };
   $("undoButton").onclick = undo; $("redoButton").onclick = redo; $("deleteButton").onclick = removeSelected; $("checkButton").onclick = runValidation;
   $("mapName").addEventListener("change", (event) => mutate(() => { spec.map_name = Core.slug(event.target.value); }));
-  $("gridSize").addEventListener("change", (event) => mutate(() => { spec.sketch_settings.grid = Number(event.target.value); }));
-  [["spawnX", 0], ["spawnY", 1]].forEach(([id, index]) => $(id).addEventListener("change", (event) => mutate(() => { spec.spawns.ct.origin[index] = Number(event.target.value); })));
+  $("gridSize").addEventListener("change", (event) => mutate(() => { Core.snapSpecToGrid(spec, Number(event.target.value)); }));
+  [["spawnX", 0], ["spawnY", 1]].forEach(([id, index]) => $(id).addEventListener("change", (event) => mutate(() => { spec.spawns.ct.origin[index] = Core.snap(Number(event.target.value), Number(spec.sketch_settings.grid)); })));
   $("spawnYaw").addEventListener("change", (event) => mutate(() => { spec.spawns.ct.angles[1] = ((Number(event.target.value) % 360) + 360) % 360; }));
-  [["centerX", "center", 0], ["centerY", "center", 1], ["centerZ", "center", 2], ["sizeX", "size", 0], ["sizeY", "size", 1], ["sizeZ", "size", 2]].forEach(([id, field, index]) => $(id).addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item?.center) return; item[field][index] = Number(event.target.value); if (field === "center" && item.editor_kind !== "floor") item.mirror = item.center[0] !== 0 || item.center[1] !== 0; })));
+  [["centerX", "center", 0], ["centerY", "center", 1], ["centerZ", "center", 2], ["sizeX", "size", 0], ["sizeY", "size", 1], ["sizeZ", "size", 2]].forEach(([id, field, index]) => $(id).addEventListener("change", (event) => mutate(() => {
+    const item = selectedItem(); if (!item?.center) return; const value = Number(event.target.value);
+    if (index < 2) { item[field][index] = value; Core.snapRectToGrid(item, spec); }
+    else item[field][index] = field === "size" ? Math.max(16, Core.snap(value, 16)) : Core.snap(value, 16);
+  })));
   $("objectName").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item) return; item.name = Core.uniqueName(spec, event.target.value, item.name); selection.name = item.name; }));
   $("rotateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.size) return; [item.size[0], item.size[1]] = [item.size[1], item.size[0]]; });
   $("duplicateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.center || item.editor_kind === "floor") return; const copy = Core.clone(item); copy.name = Core.uniqueName(spec, `${item.name}_copy`); const grid = Number(spec.sketch_settings.grid); copy.center[0] += grid; copy.center[1] += grid; copy.mirror = copy.center[0] !== 0 || copy.center[1] !== 0; Core.addElement(spec, copy); selection = { type: "element", name: copy.name }; selectedPair = false; });
@@ -405,12 +443,14 @@
   $("newButton").onclick = () => $("confirmDialog").showModal();
   $("confirmDialog").addEventListener("close", () => { if ($("confirmDialog").returnValue === "confirm") { remember(); spec = Core.defaultSpec(); selection = null; selectedPair = false; zoom = 1; commit(); } });
   document.addEventListener("keydown", (event) => {
+    if (event.code === "Space" && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) { event.preventDefault(); spacePressed = true; if (!gesture) canvas.style.cursor = "grab"; return; }
     if (["INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
     if (event.key === "Delete" || event.key === "Backspace") removeSelected();
     else if (event.key === "Escape" || event.key.toLowerCase() === "v") setTool("select");
     else if (event.ctrlKey && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
     else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", i: "water_void", g: "bridge", e: "elevated", r: "stairs", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
   });
+  document.addEventListener("keyup", (event) => { if (event.code === "Space") { spacePressed = false; if (gesture?.type !== "pan-view") canvas.style.cursor = panMode ? "grab" : tool === "select" ? "default" : "crosshair"; } });
 
   new ResizeObserver(resizeCanvas).observe($("canvasShell")); syncUI(); runValidation(); resizeCanvas();
 })();
