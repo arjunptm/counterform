@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111413">
+  <title>Counterform — CS2 Arena Sketcher</title>
+  <meta name="description" content="A local-first rotationally symmetric CS2 arena blockout sketcher.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">CF</span><div><strong>Counterform</strong><span>CS2 arena sketcher</span></div></div>
+    <div class="file-actions">
+      <span id="saveState" class="save-state">Saved in this browser</span>
+      <button id="newButton" class="button ghost">New</button>
+      <label class="button ghost" for="fileInput">Open JSON</label>
+      <input id="fileInput" type="file" accept="application/json,.json" hidden>
+      <button id="exportButton" class="button primary">Save JSON</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="rail" aria-label="Drawing tools">
+      <button class="tool active" data-tool="select" title="Select and transform (V)"><b>V</b><small>Select</small></button>
+      <div class="tool-divider"></div>
+      <button class="tool" data-tool="wall" title="Draw full-height wall (W)"><b>W</b><small>Wall</small></button>
+      <button class="tool" data-tool="cover" title="Draw standing cover (C)"><b>C</b><small>Cover</small></button>
+      <button class="tool" data-tool="low_cover" title="Draw crouch-height cover (L)"><b>L</b><small>Low</small></button>
+      <button class="tool" data-tool="crate" title="Draw crate blockout (B)"><b>B</b><small>Crate</small></button>
+      <button class="tool" data-tool="water_void" title="Draw impassable water or void (I)"><b>I</b><small>Water</small></button>
+      <button class="tool" data-tool="bridge" title="Draw bridge (G)"><b>G</b><small>Bridge</small></button>
+      <button class="tool" data-tool="elevated" title="Draw single-surface elevated region (E)"><b>E</b><small>Raised</small></button>
+      <button class="tool" data-tool="stairs" title="Draw stairs footprint (R)"><b>R</b><small>Stairs</small></button>
+      <button class="tool" data-tool="jump" title="Draw jump-up platform (J)"><b>J</b><small>Jump</small></button>
+      <button class="tool" data-tool="spawn" title="Place CT spawn (S)"><b>S</b><small>Spawn</small></button>
+      <div class="tool-divider"></div>
+      <button class="tool" data-tool="measure" title="Measure distance (M)"><b>M</b><small>Measure</small></button>
+      <button class="tool" data-tool="sightline" title="Draw sightline (X)"><b>X</b><small>Sightline</small></button>
+      <div class="rail-spacer"></div>
+      <button class="tool" id="undoButton" title="Undo (Ctrl+Z)"><b>↶</b><small>Undo</small></button>
+      <button class="tool" id="redoButton" title="Redo (Ctrl+Shift+Z)"><b>↷</b><small>Redo</small></button>
+    </aside>
+
+    <section class="stage-wrap">
+      <div class="stage-head">
+        <div><span class="eyebrow">TOP VIEW · HAMMER UNITS</span><h1 id="mapTitle">research_1v1_generated</h1></div>
+        <div class="symmetry-badge"><i></i> 180° rotation locked</div>
+      </div>
+      <div class="canvas-shell" id="canvasShell">
+        <canvas id="mapCanvas" aria-label="Top-down arena drawing canvas"></canvas>
+        <div class="canvas-help" id="canvasHelp">Draw a feature or select one to move and resize it.</div>
+        <div class="legend"><span><i class="solid"></i> editable source</span><span><i class="paired"></i> locked partner</span></div>
+        <div class="zoom-controls"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLabel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button></div>
+      </div>
+      <div class="statusbar">
+        <span id="pointerReadout">X 0 · Y 0</span>
+        <span><kbd>Drag</kbd> move · corner handles resize · <kbd>Delete</kbd> removes · <kbd>Esc</kbd> returns to Select</span>
+        <span id="objectCount">1 object</span>
+      </div>
+    </section>
+
+    <aside class="inspector">
+      <section class="panel project-panel">
+        <div class="panel-title"><span>Design</span><span class="draft-badge">Draft</span></div>
+        <label>Map name<input id="mapName" spellcheck="false"></label>
+        <div class="two-col"><label>Grid<select id="gridSize"><option>16</option><option selected>32</option><option>64</option><option>128</option></select></label><label>Material<select id="materialSelect"></select></label></div>
+      </section>
+
+      <section class="panel" id="objectPanel">
+        <div class="panel-title"><span id="selectionTitle">Selected feature</span><button id="deleteButton" class="text-button danger">Delete</button></div>
+        <div id="emptySelection" class="empty-state">Choose <strong>Select</strong>, then click a solid feature. Drag it to move; drag a corner handle to resize.</div>
+        <div id="objectFields" hidden>
+          <div class="type-row"><span id="typeBadge" class="type-badge">Wall</span><span id="buildBadge" class="build-badge">Blockout-ready</span></div>
+          <label>Name<input id="objectName" spellcheck="false"></label>
+          <div class="axis-grid" id="rectFields">
+            <label>X<input id="centerX" type="number"></label><label>Y<input id="centerY" type="number"></label><label>Elevation<input id="centerZ" type="number"></label>
+            <label>Width<input id="sizeX" type="number" min="1"></label><label>Depth<input id="sizeY" type="number" min="1"></label><label>Height<input id="sizeZ" type="number" min="1"></label>
+          </div>
+          <div class="selection-actions" id="rectActions"><button id="rotateButton" class="button ghost">Rotate 90°</button><button id="duplicateButton" class="button ghost">Duplicate</button></div>
+          <div class="pair-note"><span class="pair-swatch"></span><div><strong id="pairTitle">Paired by rotation</strong><small id="pairPosition">Partner at X 0, Y 0</small></div></div>
+          <p id="surfaceNote" class="surface-note" hidden>Single walkable surface: no playable space is expected underneath this feature.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title"><span>CT spawn</span><span class="team ct">CT</span></div>
+        <div class="axis-grid spawn-grid"><label>X<input id="spawnX" type="number"></label><label>Y<input id="spawnY" type="number"></label><label>Yaw<input id="spawnYaw" type="number"></label></div>
+        <p class="muted">Drag either spawn on the canvas. Its opposite spawn stays locked to the 180° rotation.</p>
+      </section>
+
+      <section class="panel validation-panel">
+        <div class="panel-title"><span>Design check</span><button id="checkButton" class="text-button">Run check</button></div>
+        <div id="validationMessage" class="validation good"><span>✓</span><p><strong>Draft is structurally sound</strong><small>Export stays unapproved until human review.</small></p></div>
+      </section>
+    </aside>
+  </main>
+
+  <dialog id="confirmDialog"><form method="dialog"><span class="dialog-icon">↺</span><h2>Start a fresh sketch?</h2><p>Your current design is saved in this browser. Export a JSON copy if you want a portable backup.</p><div><button value="cancel" class="button ghost">Keep editing</button><button value="confirm" class="button danger-fill">Start fresh</button></div></form></dialog>
+
+  <script src="sketch-core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

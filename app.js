@@ -1,0 +1,416 @@
+(function () {
+  "use strict";
+  const Core = window.MapSketchCore;
+  const STORAGE_KEY = "counterform.sketch.v2";
+  const LEGACY_STORAGE_KEY = "counterform.sketch.v1";
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("mapCanvas");
+  const ctx = canvas.getContext("2d");
+  const cornerSigns = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+
+  const presets = {
+    wall: { height: 192, base: "wall" }, cover: { height: 96, base: "cover" },
+    low_cover: { height: 48, base: "low_cover" }, crate: { height: 128, base: "crate" },
+    water_void: { height: 8, base: "water" }, bridge: { height: 16, base: "bridge" },
+    elevated: { height: 128, base: "raised_region" }, stairs: { height: 128, base: "stairs" },
+    jump: { height: 64, base: "jump_platform" },
+  };
+  const labels = {
+    floor: "Floor", wall: "Wall", cover: "Standing cover", low_cover: "Crouch cover",
+    crate: "Crate", water_void: "Water / void", bridge: "Bridge", elevated: "Elevated region",
+    stairs: "Stairs", jump: "Jump platform", measure: "Measurement", sightline: "Sightline",
+  };
+  const visuals = {
+    floor: ["rgba(67,78,70,.33)", "#475149"], wall: ["rgba(240,164,74,.34)", "#f0a44a"],
+    cover: ["rgba(232,237,233,.25)", "#aab5ad"], low_cover: ["rgba(167,180,171,.20)", "#89958d"],
+    crate: ["rgba(174,112,55,.42)", "#c98649"], water_void: ["rgba(55,135,180,.40)", "#54a8d1"],
+    bridge: ["rgba(139,93,52,.50)", "#c8945a"], elevated: ["rgba(210,174,69,.22)", "#d6b54e"],
+    stairs: ["rgba(218,183,77,.28)", "#e0c05c"], jump: ["rgba(157,100,209,.28)", "#b783e7"],
+  };
+
+  let spec = loadSaved();
+  let tool = "select";
+  let selection = null;
+  let selectedPair = false;
+  let gesture = null;
+  let zoom = 1;
+  let pan = { x: 0, y: 0 };
+  let history = [];
+  let future = [];
+
+  function loadSaved() {
+    for (const key of [STORAGE_KEY, LEGACY_STORAGE_KEY]) {
+      try { const value = localStorage.getItem(key); if (value) return Core.normalizeSpec(JSON.parse(value)); } catch (_) { /* use next source */ }
+    }
+    return Core.defaultSpec();
+  }
+
+  function remember(snapshot) {
+    history.push(snapshot || JSON.stringify(spec));
+    if (history.length > 60) history.shift();
+    future = [];
+  }
+
+  function commit({ clearSelection = false } = {}) {
+    spec.design_approved = false;
+    spec.spawns.t = Core.pairedSpawn(spec.spawns.ct, spec.symmetry.center);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(spec));
+    $("saveState").textContent = "Saved in this browser";
+    if (clearSelection) selection = null;
+    syncUI(); draw();
+  }
+
+  function mutate(fn) { remember(); fn(); commit(); }
+
+  function undo() {
+    if (!history.length) return;
+    future.push(JSON.stringify(spec)); spec = Core.normalizeSpec(JSON.parse(history.pop()));
+    selection = null; selectedPair = false; commit();
+  }
+
+  function redo() {
+    if (!future.length) return;
+    history.push(JSON.stringify(spec)); spec = Core.normalizeSpec(JSON.parse(future.pop()));
+    selection = null; selectedPair = false; commit();
+  }
+
+  function viewport() {
+    const rect = canvas.getBoundingClientRect();
+    const base = Math.min(rect.width / spec.sketch_settings.view_width, rect.height / spec.sketch_settings.view_height);
+    return { rect, scale: base * zoom, cx: rect.width / 2 + pan.x, cy: rect.height / 2 + pan.y };
+  }
+
+  function worldToScreen(x, y) {
+    const v = viewport();
+    return { x: v.cx + (x - spec.symmetry.center[0]) * v.scale, y: v.cy - (y - spec.symmetry.center[1]) * v.scale };
+  }
+
+  function screenToWorld(clientX, clientY) {
+    const v = viewport();
+    return { x: (clientX - v.rect.left - v.cx) / v.scale + spec.symmetry.center[0], y: -(clientY - v.rect.top - v.cy) / v.scale + spec.symmetry.center[1] };
+  }
+
+  function canonicalPoint(point, paired) {
+    if (!paired) return [point.x, point.y];
+    return Core.rotatePoint([point.x, point.y, 0], spec.symmetry.center).slice(0, 2);
+  }
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect(); const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * ratio); canvas.height = Math.round(rect.height * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0); draw();
+  }
+
+  function drawGrid() {
+    const v = viewport(); const grid = Number(spec.sketch_settings.grid);
+    const visible = grid * v.scale >= 8 ? grid : grid * Math.ceil(8 / (grid * v.scale));
+    const left = screenToWorld(v.rect.left, v.rect.top).x; const right = screenToWorld(v.rect.right, v.rect.top).x;
+    const top = screenToWorld(v.rect.left, v.rect.top).y; const bottom = screenToWorld(v.rect.left, v.rect.bottom).y;
+    ctx.lineWidth = 1;
+    for (let x = Math.floor(left / visible) * visible; x <= right; x += visible) {
+      const p = worldToScreen(x, 0); ctx.strokeStyle = x === 0 ? "#4a554d" : "#1b211d";
+      ctx.beginPath(); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, v.rect.height); ctx.stroke();
+    }
+    for (let y = Math.floor(bottom / visible) * visible; y <= top; y += visible) {
+      const p = worldToScreen(0, y); ctx.strokeStyle = y === 0 ? "#4a554d" : "#1b211d";
+      ctx.beginPath(); ctx.moveTo(0, p.y); ctx.lineTo(v.rect.width, p.y); ctx.stroke();
+    }
+    const c = worldToScreen(...spec.symmetry.center); ctx.strokeStyle = "rgba(200,240,74,.6)";
+    ctx.beginPath(); ctx.arc(c.x, c.y, 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c.x - 15, c.y); ctx.lineTo(c.x + 15, c.y); ctx.moveTo(c.x, c.y - 15); ctx.lineTo(c.x, c.y + 15); ctx.stroke();
+  }
+
+  function displayedCenter(item, paired) { return paired ? Core.rotatePoint(item.center, spec.symmetry.center) : item.center; }
+
+  function objectRect(item, paired = false) {
+    const center = displayedCenter(item, paired); const p = worldToScreen(center[0], center[1]); const v = viewport();
+    return { x: p.x - item.size[0] * v.scale / 2, y: p.y - item.size[1] * v.scale / 2, w: item.size[0] * v.scale, h: item.size[1] * v.scale };
+  }
+
+  function drawPattern(item, rect) {
+    ctx.save(); ctx.strokeStyle = visuals[item.editor_kind]?.[1] || "#aab5ad"; ctx.globalAlpha = .55; ctx.lineWidth = 1;
+    if (item.editor_kind === "water_void") {
+      for (let y = rect.y + 8; y < rect.y + rect.h; y += 12) { ctx.beginPath(); ctx.moveTo(rect.x + 5, y); ctx.bezierCurveTo(rect.x + rect.w * .3, y - 4, rect.x + rect.w * .7, y + 4, rect.x + rect.w - 5, y); ctx.stroke(); }
+    } else if (item.editor_kind === "stairs") {
+      const vertical = rect.h >= rect.w; const count = Math.max(2, Math.floor((vertical ? rect.h : rect.w) / 12));
+      for (let i = 1; i < count; i++) { const t = i / count; ctx.beginPath(); if (vertical) { const y = rect.y + rect.h * t; ctx.moveTo(rect.x, y); ctx.lineTo(rect.x + rect.w, y); } else { const x = rect.x + rect.w * t; ctx.moveTo(x, rect.y); ctx.lineTo(x, rect.y + rect.h); } ctx.stroke(); }
+    } else if (item.editor_kind === "crate") {
+      ctx.beginPath(); ctx.moveTo(rect.x, rect.y); ctx.lineTo(rect.x + rect.w, rect.y + rect.h); ctx.moveTo(rect.x + rect.w, rect.y); ctx.lineTo(rect.x, rect.y + rect.h); ctx.stroke();
+    } else if (item.editor_kind === "bridge") {
+      const vertical = rect.h >= rect.w; for (let p = 8; p < (vertical ? rect.h : rect.w); p += 14) { ctx.beginPath(); if (vertical) { ctx.moveTo(rect.x, rect.y + p); ctx.lineTo(rect.x + rect.w, rect.y + p); } else { ctx.moveTo(rect.x + p, rect.y); ctx.lineTo(rect.x + p, rect.y + rect.h); } ctx.stroke(); }
+    } else if (item.editor_kind === "jump") {
+      ctx.setLineDash([]); ctx.lineWidth = 2; const vertical = rect.h >= rect.w; const cx = rect.x + rect.w / 2; const cy = rect.y + rect.h / 2;
+      ctx.beginPath(); if (vertical) { ctx.moveTo(cx, rect.y + rect.h - 6); ctx.lineTo(cx, rect.y + 7); ctx.lineTo(cx - 5, rect.y + 13); ctx.moveTo(cx, rect.y + 7); ctx.lineTo(cx + 5, rect.y + 13); } else { ctx.moveTo(rect.x + 6, cy); ctx.lineTo(rect.x + rect.w - 7, cy); ctx.lineTo(rect.x + rect.w - 13, cy - 5); ctx.moveTo(rect.x + rect.w - 7, cy); ctx.lineTo(rect.x + rect.w - 13, cy + 5); } ctx.stroke();
+    } else if (item.editor_kind === "elevated") {
+      ctx.setLineDash([3, 4]); for (let x = rect.x - rect.h; x < rect.x + rect.w; x += 12) { ctx.beginPath(); ctx.moveTo(x, rect.y + rect.h); ctx.lineTo(x + rect.h, rect.y); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+
+  function drawObject(item, paired = false, preview = false) {
+    const rect = objectRect(item, paired); const colors = visuals[item.editor_kind] || visuals.cover;
+    const isSelected = selection?.type === "element" && selection.name === item.name && selectedPair === paired;
+    ctx.save(); ctx.fillStyle = paired ? "rgba(200,240,74,.09)" : colors[0]; ctx.strokeStyle = paired ? "rgba(200,240,74,.72)" : isSelected ? "#c8f04a" : colors[1];
+    ctx.lineWidth = isSelected ? 2 : 1; if (paired) ctx.setLineDash([5, 4]);
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h); ctx.strokeRect(rect.x + .5, rect.y + .5, Math.max(0, rect.w - 1), Math.max(0, rect.h - 1)); ctx.restore();
+    if (!paired) drawPattern(item, rect);
+    if (item.editor_kind !== "floor" && rect.w > 48 && rect.h > 20) {
+      ctx.save(); ctx.fillStyle = paired ? "rgba(200,240,74,.75)" : "#dce3de"; ctx.font = "9px ui-monospace, monospace"; ctx.textAlign = "center";
+      ctx.fillText(preview ? labels[item.editor_kind] : paired ? `${item.name} · pair` : item.name, rect.x + rect.w / 2, rect.y + rect.h / 2 + 3); ctx.restore();
+    }
+  }
+
+  function annotationPoints(item, paired = false) {
+    if (!paired) return [item.start, item.end];
+    return [Core.rotatePoint([...item.start, 0], spec.symmetry.center), Core.rotatePoint([...item.end, 0], spec.symmetry.center)];
+  }
+
+  function drawAnnotation(item, paired = false) {
+    const [a, b] = annotationPoints(item, paired); const start = worldToScreen(a[0], a[1]); const end = worldToScreen(b[0], b[1]);
+    const selected = selection?.type === "annotation" && selection.name === item.name && selectedPair === paired;
+    ctx.save(); ctx.strokeStyle = paired ? "rgba(200,240,74,.65)" : item.editor_kind === "measure" ? "#79c6ef" : "#ef6a5b";
+    ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = selected ? 3 : 2; ctx.setLineDash(item.editor_kind === "sightline" ? [8, 5] : [3, 3]);
+    ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke(); ctx.setLineDash([]);
+    const distance = Math.hypot(b[0] - a[0], b[1] - a[1]); const label = item.editor_kind === "measure" ? `${Math.round(distance)} u · ${(distance * .0254).toFixed(1)} m` : "sightline";
+    ctx.font = "700 9px ui-monospace, monospace"; ctx.textAlign = "center"; ctx.fillText(label, (start.x + end.x) / 2, (start.y + end.y) / 2 - 7);
+    if (selected) for (const p of [start, end]) { ctx.fillStyle = "#0d100e"; ctx.strokeStyle = "#c8f04a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function drawSpawn(spawn, label, color, selected) {
+    const p = worldToScreen(spawn.origin[0], spawn.origin[1]); const yaw = spawn.angles[1] * Math.PI / 180;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(-yaw); ctx.fillStyle = color; ctx.strokeStyle = selected ? "#c8f04a" : color; ctx.lineWidth = selected ? 3 : 0;
+    ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-8, -8); ctx.lineTo(-5, 0); ctx.lineTo(-8, 8); ctx.closePath(); ctx.fill(); if (selected) ctx.stroke();
+    ctx.rotate(yaw); ctx.font = "700 9px ui-sans-serif"; ctx.textAlign = "center"; ctx.fillText(label, 0, -14); ctx.restore();
+  }
+
+  function drawHandles() {
+    if (selection?.type !== "element") return; const item = Core.findElement(spec, selection.name); if (!item) return;
+    const rect = objectRect(item, selectedPair); ctx.save(); ctx.fillStyle = "#c8f04a"; ctx.strokeStyle = "#111513"; ctx.lineWidth = 1;
+    for (const [sx, sy] of cornerSigns) { const x = sx < 0 ? rect.x : rect.x + rect.w; const y = sy < 0 ? rect.y : rect.y + rect.h; ctx.fillRect(x - 5, y - 5, 10, 10); ctx.strokeRect(x - 5, y - 5, 10, 10); } ctx.restore();
+  }
+
+  function orderedElements() {
+    const rank = { floor: 0, water_void: 1, elevated: 2, bridge: 3, stairs: 4, jump: 5 };
+    return Core.allElements(spec).slice().sort((a, b) => (rank[a.editor_kind] ?? 10) - (rank[b.editor_kind] ?? 10));
+  }
+
+  function draw() {
+    const rect = canvas.getBoundingClientRect(); ctx.clearRect(0, 0, rect.width, rect.height); drawGrid();
+    for (const item of orderedElements()) { drawObject(item); if (item.mirror) drawObject(item, true); }
+    for (const item of spec.sketch_annotations) { drawAnnotation(item); if (item.mirror) drawAnnotation(item, true); }
+    if (gesture?.type === "draw-rect") drawObject(gesture.preview, false, true);
+    if (gesture?.type === "draw-line") drawAnnotation(gesture.preview);
+    drawSpawn(spec.spawns.ct, "CT", "#68b9e8", selection?.type === "spawn" && !selectedPair);
+    drawSpawn(spec.spawns.t, "T", "#ef9a63", selection?.type === "spawn" && selectedPair);
+    drawHandles();
+  }
+
+  function pointInRect(point, rect) {
+    const p = worldToScreen(point.x, point.y); return p.x >= rect.x && p.x <= rect.x + rect.w && p.y >= rect.y && p.y <= rect.y + rect.h;
+  }
+
+  function hitElement(point) {
+    const elements = orderedElements().reverse();
+    for (const item of elements) {
+      if (item.mirror && pointInRect(point, objectRect(item, true))) return { item, paired: true };
+      if (pointInRect(point, objectRect(item, false))) return { item, paired: false };
+    }
+    return null;
+  }
+
+  function distanceToSegment(point, a, b) {
+    const dx = b[0] - a[0]; const dy = b[1] - a[1]; const length2 = dx * dx + dy * dy;
+    if (!length2) return Math.hypot(point.x - a[0], point.y - a[1]);
+    const t = Math.max(0, Math.min(1, ((point.x - a[0]) * dx + (point.y - a[1]) * dy) / length2));
+    return Math.hypot(point.x - (a[0] + t * dx), point.y - (a[1] + t * dy));
+  }
+
+  function hitAnnotation(point) {
+    const tolerance = 9 / viewport().scale;
+    for (let i = spec.sketch_annotations.length - 1; i >= 0; i--) {
+      const item = spec.sketch_annotations[i];
+      if (item.mirror) { const [a, b] = annotationPoints(item, true); if (distanceToSegment(point, a, b) <= tolerance) return { item, paired: true }; }
+      if (distanceToSegment(point, item.start, item.end) <= tolerance) return { item, paired: false };
+    }
+    return null;
+  }
+
+  function hitSpawn(point) {
+    const tolerance = 15 / viewport().scale;
+    if (Math.hypot(point.x - spec.spawns.ct.origin[0], point.y - spec.spawns.ct.origin[1]) <= tolerance) return false;
+    if (Math.hypot(point.x - spec.spawns.t.origin[0], point.y - spec.spawns.t.origin[1]) <= tolerance) return true;
+    return null;
+  }
+
+  function hitCorner(event, item, paired) {
+    const rect = objectRect(item, paired); const local = { x: event.clientX - canvas.getBoundingClientRect().left, y: event.clientY - canvas.getBoundingClientRect().top };
+    for (let i = 0; i < cornerSigns.length; i++) { const [sx, sy] = cornerSigns[i]; const x = sx < 0 ? rect.x : rect.x + rect.w; const y = sy < 0 ? rect.y : rect.y + rect.h; if (Math.hypot(local.x - x, local.y - y) <= 10) return i; }
+    return -1;
+  }
+
+  function hitAnnotationEndpoint(point, item, paired) {
+    const tolerance = 10 / viewport().scale; const points = annotationPoints(item, paired);
+    for (let i = 0; i < 2; i++) if (Math.hypot(point.x - points[i][0], point.y - points[i][1]) <= tolerance) return i;
+    return -1;
+  }
+
+  function beginTransform(kind, data) { gesture = { type: kind, before: JSON.stringify(spec), changed: false, ...data }; }
+
+  function finishTransform() {
+    if (!gesture) return;
+    if (gesture.changed) { remember(gesture.before); commit(); }
+    gesture = null; draw();
+  }
+
+  function updateRectPreview(point) {
+    const grid = Number(spec.sketch_settings.grid); const a = gesture.start;
+    const center = [Core.snap((a.x + point.x) / 2, grid), Core.snap((a.y + point.y) / 2, grid), presets[tool].height / 2];
+    if (tool === "water_void") center[2] = -presets[tool].height / 2;
+    gesture.preview = {
+      name: "new", center, size: [Math.max(grid, Core.snap(Math.abs(point.x - a.x), grid)), Math.max(grid, Core.snap(Math.abs(point.y - a.y), grid)), presets[tool].height],
+      material: spec.allowed_materials[0], mirror: center[0] !== 0 || center[1] !== 0, editor_kind: tool,
+      walkable_below: ["bridge", "elevated", "stairs", "jump"].includes(tool) ? false : undefined,
+    };
+  }
+
+  function updateLinePreview(point) {
+    const grid = Number(spec.sketch_settings.grid); const start = [Core.snap(gesture.start.x, grid), Core.snap(gesture.start.y, grid)]; const end = [Core.snap(point.x, grid), Core.snap(point.y, grid)];
+    const midpoint = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+    gesture.preview = { name: "new", editor_kind: tool, start, end, mirror: midpoint[0] !== 0 || midpoint[1] !== 0 };
+  }
+
+  function setTool(next) {
+    tool = next; gesture = null;
+    document.querySelectorAll("[data-tool]").forEach((button) => button.classList.toggle("active", button.dataset.tool === next));
+    const messages = { select: "Click a solid feature, then drag to move or use its corner handles to resize.", spawn: "Click to place CT; drag either spawn later to rearrange it.", measure: "Drag between two points to record their distance.", sightline: "Drag to mark a sightline for later design review." };
+    $("canvasHelp").textContent = messages[next] || `Drag to draw ${labels[next].toLowerCase()}. Its rotational partner appears automatically.`;
+    canvas.style.cursor = next === "select" ? "default" : "crosshair";
+    draw();
+  }
+
+  function selectedItem() {
+    if (!selection) return null;
+    return selection.type === "element" ? Core.findElement(spec, selection.name) : selection.type === "annotation" ? Core.findAnnotation(spec, selection.name) : null;
+  }
+
+  function syncUI() {
+    $("mapTitle").textContent = spec.map_name; $("mapName").value = spec.map_name; $("gridSize").value = String(spec.sketch_settings.grid);
+    $("materialSelect").innerHTML = spec.allowed_materials.map((m) => `<option>${m}</option>`).join("");
+    $("spawnX").value = spec.spawns.ct.origin[0]; $("spawnY").value = spec.spawns.ct.origin[1]; $("spawnYaw").value = spec.spawns.ct.angles[1];
+    const item = selectedItem(); const hasItem = Boolean(item);
+    $("emptySelection").hidden = hasItem; $("objectFields").hidden = !hasItem; $("deleteButton").hidden = !hasItem || item?.editor_kind === "floor";
+    if (item) {
+      const rect = Boolean(item.center); $("selectionTitle").textContent = rect ? "Selected feature" : "Selected annotation";
+      $("typeBadge").textContent = labels[item.editor_kind] || item.editor_kind; $("objectName").value = item.name;
+      $("rectFields").hidden = !rect; $("rectActions").hidden = !rect;
+      const generatorReady = rect && Core.GENERATOR_KINDS.has(item.editor_kind);
+      $("buildBadge").textContent = generatorReady ? "Blockout-ready" : "Sketch-only"; $("buildBadge").classList.toggle("sketch-only", !generatorReady);
+      if (rect) {
+        ["centerX", "centerY", "centerZ"].forEach((id, i) => $(id).value = item.center[i]); ["sizeX", "sizeY", "sizeZ"].forEach((id, i) => $(id).value = item.size[i]);
+        const pair = Core.rotatePoint(item.center, spec.symmetry.center); $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered feature"; $("pairPosition").textContent = item.mirror ? `Partner at X ${pair[0]}, Y ${pair[1]}` : "This feature builds once at the rotation center.";
+      } else { $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered annotation"; $("pairPosition").textContent = item.mirror ? "The opposite annotation is locked." : "This annotation is invariant under rotation."; }
+      $("surfaceNote").hidden = !["elevated", "bridge", "stairs", "jump"].includes(item.editor_kind);
+    }
+    const sources = Core.allElements(spec).length; const built = Core.allElements(spec).reduce((sum, item) => sum + (item.mirror ? 2 : 1), 0);
+    $("objectCount").textContent = `${sources} source feature${sources === 1 ? "" : "s"} · ${built} visible`;
+    $("undoButton").disabled = !history.length; $("redoButton").disabled = !future.length;
+  }
+
+  function runValidation() {
+    const report = Core.validateDraft(spec); const box = $("validationMessage");
+    if (report.errors.length) { box.className = "validation bad"; box.innerHTML = `<span>!</span><p><strong>${report.errors.length} issue${report.errors.length > 1 ? "s" : ""} found</strong><small>${report.errors.join(" ")}</small></p>`; }
+    else if (report.warnings.length) { box.className = "validation warn"; box.innerHTML = `<span>!</span><p><strong>Valid design draft</strong><small>${report.warnings.join(" ")}</small></p>`; }
+    else { box.className = "validation good"; box.innerHTML = "<span>✓</span><p><strong>Draft is structurally sound</strong><small>Export stays unapproved until human review.</small></p>"; }
+  }
+
+  function removeSelected() {
+    const item = selectedItem(); if (!item || item.editor_kind === "floor") return;
+    mutate(() => { if (selection.type === "element") Core.removeElement(spec, item.name); else spec.sketch_annotations = spec.sketch_annotations.filter((entry) => entry.name !== item.name); selection = null; });
+  }
+
+  canvas.addEventListener("pointerdown", (event) => {
+    const point = screenToWorld(event.clientX, event.clientY); canvas.setPointerCapture(event.pointerId);
+    if (tool === "select") {
+      const current = selectedItem();
+      if (selection?.type === "element" && current) { const corner = hitCorner(event, current, selectedPair); if (corner >= 0) { beginTransform("resize-element", { item: current, paired: selectedPair, corner, original: Core.clone(current) }); return; } }
+      if (selection?.type === "annotation" && current) { const endpoint = hitAnnotationEndpoint(point, current, selectedPair); if (endpoint >= 0) { beginTransform("resize-annotation", { item: current, paired: selectedPair, endpoint, original: Core.clone(current) }); return; } }
+      const spawnPair = hitSpawn(point);
+      if (spawnPair !== null) { selection = { type: "spawn", name: "spawn" }; selectedPair = spawnPair; beginTransform("move-spawn", { paired: spawnPair }); syncUI(); draw(); return; }
+      const annotationHit = hitAnnotation(point);
+      if (annotationHit) { selection = { type: "annotation", name: annotationHit.item.name }; selectedPair = annotationHit.paired; const canonical = canonicalPoint(point, selectedPair); beginTransform("move-annotation", { item: annotationHit.item, paired: selectedPair, anchor: canonical, original: Core.clone(annotationHit.item) }); syncUI(); draw(); return; }
+      const hit = hitElement(point);
+      if (hit) { selection = { type: "element", name: hit.item.name }; selectedPair = hit.paired; if (hit.item.editor_kind !== "floor") { const canonical = canonicalPoint(point, selectedPair); beginTransform("move-element", { item: hit.item, paired: selectedPair, anchor: canonical, original: Core.clone(hit.item) }); } syncUI(); draw(); return; }
+      selection = null; selectedPair = false; syncUI(); draw();
+    } else if (tool === "spawn") {
+      selection = { type: "spawn", name: "spawn" }; selectedPair = false;
+      mutate(() => { const grid = Number(spec.sketch_settings.grid); spec.spawns.ct.origin[0] = Core.snap(point.x, grid); spec.spawns.ct.origin[1] = Core.snap(point.y, grid); });
+      setTool("select");
+    } else if (Core.ANNOTATION_KINDS.has(tool)) { gesture = { type: "draw-line", start: point, preview: null }; updateLinePreview(point); }
+    else { gesture = { type: "draw-rect", start: point, preview: null }; updateRectPreview(point); }
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    const point = screenToWorld(event.clientX, event.clientY); $("pointerReadout").textContent = `X ${Math.round(point.x)} · Y ${Math.round(point.y)}`;
+    if (!gesture) return;
+    const grid = Number(spec.sketch_settings.grid);
+    if (gesture.type === "draw-rect") updateRectPreview(point);
+    else if (gesture.type === "draw-line") updateLinePreview(point);
+    else if (gesture.type === "move-element") {
+      const p = canonicalPoint(point, gesture.paired); gesture.item.center[0] = Core.snap(gesture.original.center[0] + p[0] - gesture.anchor[0], grid); gesture.item.center[1] = Core.snap(gesture.original.center[1] + p[1] - gesture.anchor[1], grid); gesture.item.mirror = gesture.item.center[0] !== 0 || gesture.item.center[1] !== 0; gesture.changed = true;
+    } else if (gesture.type === "resize-element") {
+      const p = canonicalPoint(point, gesture.paired); const [screenSx, screenSy] = cornerSigns[gesture.corner];
+      const sx = gesture.paired ? -screenSx : screenSx; const sy = gesture.paired ? -screenSy : screenSy;
+      if (gesture.item.editor_kind === "floor") { gesture.item.size[0] = Math.max(grid, 2 * Math.abs(Core.snap(p[0] - spec.symmetry.center[0], grid))); gesture.item.size[1] = Math.max(grid, 2 * Math.abs(Core.snap(p[1] - spec.symmetry.center[1], grid))); }
+      else { const opposite = [gesture.original.center[0] - sx * gesture.original.size[0] / 2, gesture.original.center[1] + sy * gesture.original.size[1] / 2]; const moving = [Core.snap(p[0], grid), Core.snap(p[1], grid)]; gesture.item.center[0] = Core.snap((moving[0] + opposite[0]) / 2, grid / 2); gesture.item.center[1] = Core.snap((moving[1] + opposite[1]) / 2, grid / 2); gesture.item.size[0] = Math.max(grid, Math.abs(moving[0] - opposite[0])); gesture.item.size[1] = Math.max(grid, Math.abs(moving[1] - opposite[1])); gesture.item.mirror = gesture.item.center[0] !== 0 || gesture.item.center[1] !== 0; } gesture.changed = true;
+    } else if (gesture.type === "move-spawn") {
+      const p = canonicalPoint(point, gesture.paired); spec.spawns.ct.origin[0] = Core.snap(p[0], grid); spec.spawns.ct.origin[1] = Core.snap(p[1], grid); spec.spawns.t = Core.pairedSpawn(spec.spawns.ct, spec.symmetry.center); gesture.changed = true;
+    } else if (gesture.type === "move-annotation") {
+      const p = canonicalPoint(point, gesture.paired); const dx = Core.snap(p[0] - gesture.anchor[0], grid); const dy = Core.snap(p[1] - gesture.anchor[1], grid); gesture.item.start = [gesture.original.start[0] + dx, gesture.original.start[1] + dy]; gesture.item.end = [gesture.original.end[0] + dx, gesture.original.end[1] + dy]; gesture.changed = true;
+    } else if (gesture.type === "resize-annotation") {
+      const p = canonicalPoint(point, gesture.paired); const target = gesture.endpoint === 0 ? "start" : "end"; gesture.item[target] = [Core.snap(p[0], grid), Core.snap(p[1], grid)]; const midpoint = [(gesture.item.start[0] + gesture.item.end[0]) / 2, (gesture.item.start[1] + gesture.item.end[1]) / 2]; gesture.item.mirror = midpoint[0] !== 0 || midpoint[1] !== 0; gesture.changed = true;
+    }
+    draw();
+  });
+
+  canvas.addEventListener("pointerup", () => {
+    if (!gesture) return;
+    if (gesture.type === "draw-rect") {
+      const item = gesture.preview; if (!item) { gesture = null; return; }
+      item.name = Core.uniqueName(spec, presets[item.editor_kind].base); mutate(() => { Core.addElement(spec, item); selection = { type: "element", name: item.name }; selectedPair = false; }); gesture = null; setTool("select");
+    } else if (gesture.type === "draw-line") {
+      const item = gesture.preview; if (!item || (item.start[0] === item.end[0] && item.start[1] === item.end[1])) { gesture = null; draw(); return; }
+      item.name = Core.uniqueName(spec, item.editor_kind); mutate(() => { spec.sketch_annotations.push(item); selection = { type: "annotation", name: item.name }; selectedPair = false; }); gesture = null; setTool("select");
+    } else finishTransform();
+    $("canvasHelp").classList.add("hidden");
+  });
+
+  canvas.addEventListener("pointercancel", () => { if (gesture?.before) spec = Core.normalizeSpec(JSON.parse(gesture.before)); gesture = null; commit(); });
+  canvas.addEventListener("wheel", (event) => { event.preventDefault(); zoom = Math.max(.55, Math.min(2.4, zoom * (event.deltaY > 0 ? .9 : 1.1))); $("zoomLabel").textContent = `${Math.round(zoom * 100)}%`; draw(); }, { passive: false });
+
+  document.querySelectorAll("[data-tool]").forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
+  $("zoomIn").onclick = () => { zoom = Math.min(2.4, zoom + .1); $("zoomLabel").textContent = `${Math.round(zoom * 100)}%`; draw(); };
+  $("zoomOut").onclick = () => { zoom = Math.max(.55, zoom - .1); $("zoomLabel").textContent = `${Math.round(zoom * 100)}%`; draw(); };
+  $("undoButton").onclick = undo; $("redoButton").onclick = redo; $("deleteButton").onclick = removeSelected; $("checkButton").onclick = runValidation;
+  $("mapName").addEventListener("change", (event) => mutate(() => { spec.map_name = Core.slug(event.target.value); }));
+  $("gridSize").addEventListener("change", (event) => mutate(() => { spec.sketch_settings.grid = Number(event.target.value); }));
+  [["spawnX", 0], ["spawnY", 1]].forEach(([id, index]) => $(id).addEventListener("change", (event) => mutate(() => { spec.spawns.ct.origin[index] = Number(event.target.value); })));
+  $("spawnYaw").addEventListener("change", (event) => mutate(() => { spec.spawns.ct.angles[1] = ((Number(event.target.value) % 360) + 360) % 360; }));
+  [["centerX", "center", 0], ["centerY", "center", 1], ["centerZ", "center", 2], ["sizeX", "size", 0], ["sizeY", "size", 1], ["sizeZ", "size", 2]].forEach(([id, field, index]) => $(id).addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item?.center) return; item[field][index] = Number(event.target.value); if (field === "center" && item.editor_kind !== "floor") item.mirror = item.center[0] !== 0 || item.center[1] !== 0; })));
+  $("objectName").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item) return; item.name = Core.uniqueName(spec, event.target.value, item.name); selection.name = item.name; }));
+  $("rotateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.size) return; [item.size[0], item.size[1]] = [item.size[1], item.size[0]]; });
+  $("duplicateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.center || item.editor_kind === "floor") return; const copy = Core.clone(item); copy.name = Core.uniqueName(spec, `${item.name}_copy`); const grid = Number(spec.sketch_settings.grid); copy.center[0] += grid; copy.center[1] += grid; copy.mirror = copy.center[0] !== 0 || copy.center[1] !== 0; Core.addElement(spec, copy); selection = { type: "element", name: copy.name }; selectedPair = false; });
+  $("exportButton").onclick = () => { const data = JSON.stringify(Core.exportSpec(spec), null, 2) + "\n"; const blob = new Blob([data], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${spec.map_name}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 0); };
+  $("fileInput").addEventListener("change", async (event) => { const file = event.target.files[0]; if (!file) return; try { const loaded = Core.normalizeSpec(JSON.parse(await file.text())); remember(); spec = loaded; selection = null; selectedPair = false; zoom = 1; pan = { x: 0, y: 0 }; commit(); runValidation(); } catch (error) { alert(`Could not open design: ${error.message}`); } event.target.value = ""; });
+  $("newButton").onclick = () => $("confirmDialog").showModal();
+  $("confirmDialog").addEventListener("close", () => { if ($("confirmDialog").returnValue === "confirm") { remember(); spec = Core.defaultSpec(); selection = null; selectedPair = false; zoom = 1; commit(); } });
+  document.addEventListener("keydown", (event) => {
+    if (["INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
+    if (event.key === "Delete" || event.key === "Backspace") removeSelected();
+    else if (event.key === "Escape" || event.key.toLowerCase() === "v") setTool("select");
+    else if (event.ctrlKey && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
+    else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", i: "water_void", g: "bridge", e: "elevated", r: "stairs", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
+  });
+
+  new ResizeObserver(resizeCanvas).observe($("canvasShell")); syncUI(); runValidation(); resizeCanvas();
+})();
