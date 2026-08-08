@@ -13,3 +13,6 @@ directly.
 The editor runs entirely in the browser. Designs are saved in local browser
 storage and can be exported or reopened as JSON. Its blockout palette includes
 cardinal-direction ramps with a validated fixed 2:1 run-to-rise slope.
+Schema-v3 sketches also expose base elevation and explicit named placement on
+floors, bridges, and raised regions, with embedded-solid detection before a
+design can build.

@@ -75,9 +75,10 @@
           <div class="type-row"><span id="typeBadge" class="type-badge">Wall</span><span id="buildBadge" class="build-badge">Blockout-ready</span></div>
           <label>Name<input id="objectName" spellcheck="false"></label>
           <div class="axis-grid" id="rectFields">
-            <label>X<input id="centerX" type="number" step="16"></label><label>Y<input id="centerY" type="number" step="16"></label><label>Elevation<input id="centerZ" type="number" step="16"></label>
+            <label>X<input id="centerX" type="number" step="16"></label><label>Y<input id="centerY" type="number" step="16"></label><label>Base elevation<input id="baseZ" type="number" step="16"></label>
             <label>Width<input id="sizeX" type="number" min="16" step="32"></label><label>Depth<input id="sizeY" type="number" min="16" step="32"></label><label>Height<input id="sizeZ" type="number" min="16" step="16"></label>
           </div>
+          <div id="supportFields"><label>Placed on<select id="supportSelect"></select></label><p class="muted" id="supportNote">Base elevation is derived from the selected surface.</p></div>
           <div id="rampFields" hidden>
             <label>Ramp ascent<select id="rampAscent"><option value="x+">+X</option><option value="x-">-X</option><option value="y+">+Y</option><option value="y-">-Y</option></select></label>
           </div>

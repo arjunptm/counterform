@@ -11,6 +11,9 @@
   const ANNOTATION_KINDS = new Set(["measure", "sightline"]);
   const RAMP_DIRECTIONS = new Set(["x+", "x-", "y+", "y-"]);
   const RAMP_OPPOSITES = { "x+": "x-", "x-": "x+", "y+": "y-", "y-": "y+" };
+  const SUPPORT_KINDS = new Set(["floor", "bridge", "elevated"]);
+  const SUPPORTABLE_KINDS = new Set(["wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "jump"]);
+  const SOLID_KINDS = new Set([...GENERATOR_KINDS, "stairs", "jump"]);
   const DEFAULT_GRID = 32;
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -18,7 +21,7 @@
   function defaultSpec() {
     return {
       schema_version: 1,
-      sketch_schema_version: 2,
+      sketch_schema_version: 3,
       design_approved: false,
       map_name: "research_1v1_generated",
       symmetry: { mode: "rotation", center: [0, 0] },
@@ -31,6 +34,7 @@
       allowed_materials: [MATERIAL],
       geometry: [{
         name: "arena_floor", center: [0, 0, -32], size: [2048, 1280, 64],
+        base_z: -64, supported_by: null,
         material: MATERIAL, mirror: false, editor_kind: "floor",
       }],
       sketch_elements: [],
@@ -61,6 +65,27 @@
 
   function snap(value, grid) { return cleanNumber(Math.round(Number(value) / grid) * grid); }
 
+  function itemBaseZ(item) {
+    if (typeof item?.base_z === "number" && Number.isFinite(item.base_z)) return item.base_z;
+    return Number(item?.center?.[2] || 0) - Number(item?.size?.[2] || 0) / 2;
+  }
+
+  function itemTopZ(item) { return cleanNumber(itemBaseZ(item) + Number(item.size[2])); }
+
+  function rectBounds(item) {
+    return [
+      Number(item.center[0]) - Number(item.size[0]) / 2,
+      Number(item.center[1]) - Number(item.size[1]) / 2,
+      Number(item.center[0]) + Number(item.size[0]) / 2,
+      Number(item.center[1]) + Number(item.size[1]) / 2,
+    ];
+  }
+
+  function containsRect(outer, inner, tolerance = 1e-6) {
+    const a = rectBounds(outer); const b = rectBounds(inner);
+    return b[0] >= a[0] - tolerance && b[1] >= a[1] - tolerance && b[2] <= a[2] + tolerance && b[3] <= a[3] + tolerance;
+  }
+
   function snapRectToGrid(item, spec, grid = Number(spec.sketch_settings?.grid || DEFAULT_GRID)) {
     if (!item?.center || !item?.size) return item;
     const symmetry = spec.symmetry.center;
@@ -85,13 +110,18 @@
   function snapSpecToGrid(spec, requestedGrid) {
     const grid = [16, 32, 64, 128].includes(Number(requestedGrid)) ? Number(requestedGrid) : DEFAULT_GRID;
     spec.sketch_settings.grid = grid;
-    allElements(spec).forEach((item) => snapRectToGrid(item, spec, grid));
+    allElements(spec).forEach((item) => {
+      snapRectToGrid(item, spec, grid);
+      item.base_z = snap(itemBaseZ(item), 16);
+      item.center[2] = cleanNumber(item.base_z + item.size[2] / 2);
+    });
     (spec.sketch_annotations || []).forEach((item) => {
       item.start = item.start.map((value) => snap(value, grid));
       item.end = item.end.map((value) => snap(value, grid));
     });
     spec.spawns.ct.origin[0] = snap(spec.spawns.ct.origin[0], grid);
     spec.spawns.ct.origin[1] = snap(spec.spawns.ct.origin[1], grid);
+    resolveVerticalPlacement(spec);
     spec.spawns.t = pairedSpawn(spec.spawns.ct, spec.symmetry.center);
     return spec;
   }
@@ -114,13 +144,87 @@
   function findAnnotation(spec, name) { return (spec.sketch_annotations || []).find((item) => item.name === name) || null; }
 
   function addElement(spec, item) {
+    item.base_z = itemBaseZ(item);
+    item.supported_by = typeof item.supported_by === "string" && item.supported_by ? item.supported_by : null;
+    item.center[2] = cleanNumber(item.base_z + item.size[2] / 2);
     const target = GENERATOR_KINDS.has(item.editor_kind) ? spec.geometry : spec.sketch_elements;
     target.push(item); return item;
   }
 
   function removeElement(spec, name) {
+    allElements(spec).forEach((item) => { if (item.supported_by === name) item.supported_by = null; });
     spec.geometry = spec.geometry.filter((item) => item.name !== name);
     spec.sketch_elements = spec.sketch_elements.filter((item) => item.name !== name);
+  }
+
+  function supportCandidates(spec, item) {
+    if (!item || !SUPPORTABLE_KINDS.has(item.editor_kind)) return [];
+    return allElements(spec)
+      .filter((candidate) => candidate !== item && SUPPORT_KINDS.has(candidate.editor_kind) && containsRect(candidate, item))
+      .sort((a, b) => itemTopZ(b) - itemTopZ(a) || a.name.localeCompare(b.name));
+  }
+
+  function bestSupportFor(spec, item) { return supportCandidates(spec, item)[0]?.name || null; }
+
+  function resolveVerticalPlacement(spec) {
+    const visiting = new Set(); const resolved = new Set();
+    function resolve(item) {
+      if (!item || resolved.has(item.name)) return;
+      if (visiting.has(item.name)) return;
+      visiting.add(item.name);
+      if (item.supported_by) {
+        const support = findElement(spec, item.supported_by);
+        if (support && support !== item) { resolve(support); item.base_z = itemTopZ(support); }
+      }
+      item.base_z = cleanNumber(itemBaseZ(item));
+      item.center[2] = cleanNumber(item.base_z + Number(item.size[2]) / 2);
+      visiting.delete(item.name); resolved.add(item.name);
+    }
+    allElements(spec).forEach(resolve);
+    return spec;
+  }
+
+  function setSupport(spec, item, supportName) {
+    item.supported_by = supportName || null;
+    resolveVerticalPlacement(spec);
+    return item;
+  }
+
+  function expandedElements(spec) {
+    const expanded = [];
+    allElements(spec).forEach((item) => {
+      expanded.push(Object.assign(clone(item), { instance_name: item.name, paired: false }));
+      if (item.mirror) {
+        const pair = Object.assign(clone(item), {
+          center: rotatePoint(item.center, spec.symmetry.center),
+          instance_name: `${item.name}_pair`, paired: true,
+        });
+        if (item.ascent) pair.ascent = RAMP_OPPOSITES[item.ascent];
+        if (item.supported_by) {
+          const support = findElement(spec, item.supported_by);
+          pair.supported_by = support?.mirror ? `${support.name}_pair` : support?.name || item.supported_by;
+        }
+        expanded.push(pair);
+      }
+    });
+    return expanded;
+  }
+
+  function solidIntersections(spec, tolerance = 1e-6) {
+    const solids = expandedElements(spec).filter((item) => SOLID_KINDS.has(item.editor_kind));
+    const intersections = [];
+    for (let first = 0; first < solids.length; first++) for (let second = first + 1; second < solids.length; second++) {
+      const a = solids[first]; const b = solids[second];
+      const overlap = [0, 1, 2].every((axis) => {
+        const aMin = Number(a.center[axis]) - Number(a.size[axis]) / 2;
+        const aMax = Number(a.center[axis]) + Number(a.size[axis]) / 2;
+        const bMin = Number(b.center[axis]) - Number(b.size[axis]) / 2;
+        const bMax = Number(b.center[axis]) + Number(b.size[axis]) / 2;
+        return Math.min(aMax, bMax) - Math.max(aMin, bMin) > tolerance;
+      });
+      if (overlap) intersections.push([a.instance_name, b.instance_name]);
+    }
+    return intersections;
   }
 
   function moveElementBucket(spec, item, previousKind) {
@@ -137,6 +241,10 @@
     item.material ||= spec.allowed_materials[0];
     item.center = [Number(item.center?.[0] || 0), Number(item.center?.[1] || 0), Number(item.center?.[2] || 0)];
     item.size = [Number(item.size?.[0] || 32), Number(item.size?.[1] || 32), Number(item.size?.[2] || 32)];
+    item.base_z = typeof item.base_z === "number" && Number.isFinite(item.base_z) ? item.base_z : item.center[2] - item.size[2] / 2;
+    item.supported_by = typeof item.supported_by === "string" && item.supported_by ? slug(item.supported_by) : null;
+    if (item.editor_kind === "floor") item.supported_by = null;
+    item.center[2] = cleanNumber(item.base_z + item.size[2] / 2);
     if (item.editor_kind === "ramp") {
       item.ascent = RAMP_DIRECTIONS.has(item.ascent) ? item.ascent : item.size[0] >= item.size[1] ? "x+" : "y+";
     } else delete item.ascent;
@@ -151,7 +259,8 @@
     if (input.symmetry?.mode !== "rotation" || !Array.isArray(input.symmetry.center)) throw new Error("This sketcher opens 180-degree rotational designs only.");
     if (!Array.isArray(input.geometry) || !input.spawns?.ct) throw new Error("The JSON is missing geometry or spawn data.");
     const spec = clone(input);
-    spec.sketch_schema_version = 2;
+    if (![2, 3].includes(Number(input.sketch_schema_version || 2))) throw new Error("Only sketch schema versions 2 and 3 are supported.");
+    spec.sketch_schema_version = 3;
     spec.design_approved = false;
     spec.allowed_materials = Array.isArray(spec.allowed_materials) && spec.allowed_materials.length ? spec.allowed_materials : [MATERIAL];
     spec.sketch_elements = Array.isArray(spec.sketch_elements) ? spec.sketch_elements : [];
@@ -166,6 +275,7 @@
       start: [Number(item.start?.[0] || 0), Number(item.start?.[1] || 0)],
       end: [Number(item.end?.[0] || 0), Number(item.end?.[1] || 0)], mirror: item.mirror !== false,
     }));
+    resolveVerticalPlacement(spec);
     spec.spawns.t = pairedSpawn(spec.spawns.ct, spec.symmetry.center);
     return snapSpecToGrid(spec, spec.sketch_settings.grid);
   }
@@ -181,6 +291,18 @@
         const atCenter = item.center[0] === spec.symmetry.center[0] && item.center[1] === spec.symmetry.center[1];
         if (item.editor_kind !== "floor" && item.mirror === atCenter) errors.push(`${item.name} has an invalid symmetry setting.`);
       }
+      if (typeof item.base_z !== "number" || !Number.isFinite(item.base_z)) errors.push(`${item.name} has an invalid base elevation.`);
+      else if (item.center && cleanNumber(item.base_z + item.size[2] / 2) !== cleanNumber(item.center[2])) errors.push(`${item.name} center Z does not match its base elevation and height.`);
+      if (item.supported_by) {
+        const support = findElement(spec, item.supported_by);
+        if (!support) errors.push(`${item.name} refers to missing support ${item.supported_by}.`);
+        else {
+          if (!SUPPORT_KINDS.has(support.editor_kind)) errors.push(`${item.name} cannot be supported by ${support.name} (${support.editor_kind}).`);
+          if (support === item) errors.push(`${item.name} cannot support itself.`);
+          if (!containsRect(support, item)) errors.push(`${item.name} extends outside its support ${support.name}.`);
+          if (cleanNumber(itemBaseZ(item)) !== cleanNumber(itemTopZ(support))) errors.push(`${item.name} base elevation does not match the top of ${support.name}.`);
+        }
+      }
       if (item.editor_kind === "elevated" && item.walkable_below !== false) errors.push(`${item.name} must be single-surface elevation.`);
       if (item.editor_kind === "ramp") {
         if (!RAMP_DIRECTIONS.has(item.ascent)) errors.push(`${item.name} has an invalid ramp ascent direction.`);
@@ -191,6 +313,15 @@
         if (item.walkable_below !== false) errors.push(`${item.name} must be a solid ramp.`);
       }
     });
+    const supportEdges = new Map(allElements(spec).map((item) => [item.name, item.supported_by]));
+    for (const item of allElements(spec)) {
+      const seen = new Set(); let current = item.name;
+      while (current) {
+        if (seen.has(current)) { errors.push(`Support cycle includes ${item.name}.`); break; }
+        seen.add(current); current = supportEdges.get(current) || null;
+      }
+    }
+    solidIntersections(spec).forEach(([first, second]) => errors.push(`${first} intersects ${second} with positive solid volume.`));
     if (allElements(spec).length === 1) warnings.push("The draft contains only the arena floor.");
     if (spec.sketch_elements.length) warnings.push(`${spec.sketch_elements.length} sketch element${spec.sketch_elements.length === 1 ? "" : "s"} will need deliberate Hammer implementation.`);
     if (spec.design_approved) errors.push("Editor drafts must remain unapproved until reviewed.");
@@ -198,15 +329,17 @@
   }
 
   function exportSpec(spec) {
-    const output = snapSpecToGrid(clone(spec), spec.sketch_settings.grid); output.design_approved = false;
+    const output = snapSpecToGrid(clone(spec), spec.sketch_settings.grid); output.design_approved = false; output.sketch_schema_version = 3;
+    resolveVerticalPlacement(output);
     output.spawns.t = pairedSpawn(output.spawns.ct, output.symmetry.center);
     return output;
   }
 
   return {
-    MATERIAL, DEFAULT_GRID, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, RAMP_DIRECTIONS, RAMP_OPPOSITES, clone, defaultSpec,
+    MATERIAL, DEFAULT_GRID, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, RAMP_DIRECTIONS, RAMP_OPPOSITES, SUPPORT_KINDS, SUPPORTABLE_KINDS, clone, defaultSpec,
     rotatePoint, pairedSpawn, cleanNumber, snap, snapRectToGrid, snapSpecToGrid, slug, allElements, allNamed, uniqueName,
-    findElement, findAnnotation, addElement, removeElement, moveElementBucket,
+    findElement, findAnnotation, addElement, removeElement, moveElementBucket, itemBaseZ, itemTopZ, containsRect,
+    supportCandidates, bestSupportFor, setSupport, resolveVerticalPlacement, expandedElements, solidIntersections,
     normalizeSpec, validateDraft, exportSpec,
   };
 });

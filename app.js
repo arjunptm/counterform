@@ -1,8 +1,8 @@
 (function () {
   "use strict";
   const Core = window.MapSketchCore;
-  const STORAGE_KEY = "counterform.sketch.v2";
-  const LEGACY_STORAGE_KEY = "counterform.sketch.v1";
+  const STORAGE_KEY = "counterform.sketch.v3";
+  const LEGACY_STORAGE_KEYS = ["counterform.sketch.v2", "counterform.sketch.v1"];
   const $ = (id) => document.getElementById(id);
   const canvas = $("mapCanvas");
   const ctx = canvas.getContext("2d");
@@ -41,7 +41,7 @@
   let future = [];
 
   function loadSaved() {
-    for (const key of [STORAGE_KEY, LEGACY_STORAGE_KEY]) {
+    for (const key of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
       try { const value = localStorage.getItem(key); if (value) return Core.normalizeSpec(JSON.parse(value)); } catch (_) { /* use next source */ }
     }
     return Core.defaultSpec();
@@ -55,6 +55,7 @@
 
   function commit({ clearSelection = false } = {}) {
     spec.design_approved = false;
+    Core.resolveVerticalPlacement(spec);
     spec.spawns.t = Core.pairedSpawn(spec.spawns.ct, spec.symmetry.center);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(spec));
     $("saveState").textContent = "Saved in this browser";
@@ -309,13 +310,20 @@
       size[2] = size[runAxis] / 2;
     }
     const center = [Core.cleanNumber((start[0] + end[0]) / 2), Core.cleanNumber((start[1] + end[1]) / 2), size[2] / 2];
-    if (tool === "water_void") center[2] = -presets[tool].height / 2;
+    let baseZ = tool === "water_void" ? -presets[tool].height : 0;
     gesture.preview = {
-      name: "new", center, size,
+      name: "new", center, size, base_z: baseZ, supported_by: null,
       material: spec.allowed_materials[0], mirror: center[0] !== 0 || center[1] !== 0, editor_kind: tool,
       walkable_below: ["bridge", "elevated", "ramp", "stairs", "jump"].includes(tool) ? false : undefined,
       ascent,
     };
+    if (Core.SUPPORTABLE_KINDS.has(tool)) {
+      gesture.preview.supported_by = Core.bestSupportFor(spec, gesture.preview);
+      const support = Core.findElement(spec, gesture.preview.supported_by);
+      if (support) baseZ = Core.itemTopZ(support);
+    }
+    gesture.preview.base_z = baseZ;
+    gesture.preview.center[2] = Core.cleanNumber(baseZ + size[2] / 2);
   }
 
   function updateLinePreview(point) {
@@ -350,10 +358,19 @@
       $("typeBadge").textContent = labels[item.editor_kind] || item.editor_kind; $("objectName").value = item.name;
       $("rectFields").hidden = !rect; $("rectActions").hidden = !rect;
       $("rampFields").hidden = !rect || item.editor_kind !== "ramp";
+      const supportable = rect && Core.SUPPORTABLE_KINDS.has(item.editor_kind);
+      $("supportFields").hidden = !supportable;
       const generatorReady = rect && Core.GENERATOR_KINDS.has(item.editor_kind);
       $("buildBadge").textContent = generatorReady ? "Blockout-ready" : "Sketch-only"; $("buildBadge").classList.toggle("sketch-only", !generatorReady);
       if (rect) {
-        ["centerX", "centerY", "centerZ"].forEach((id, i) => $(id).value = item.center[i]); ["sizeX", "sizeY", "sizeZ"].forEach((id, i) => $(id).value = item.size[i]);
+        ["centerX", "centerY"].forEach((id, i) => $(id).value = item.center[i]); $("baseZ").value = Core.itemBaseZ(item); ["sizeX", "sizeY", "sizeZ"].forEach((id, i) => $(id).value = item.size[i]);
+        $("baseZ").disabled = Boolean(item.supported_by);
+        if (supportable) {
+          const supports = Core.allElements(spec).filter((candidate) => candidate !== item && Core.SUPPORT_KINDS.has(candidate.editor_kind));
+          $("supportSelect").innerHTML = '<option value="">Absolute base elevation</option>' + supports.map((candidate) => `<option value="${candidate.name}">${candidate.name} · top Z ${Core.itemTopZ(candidate)}</option>`).join("");
+          $("supportSelect").value = item.supported_by || "";
+          $("supportNote").textContent = item.supported_by ? `Base Z follows ${item.supported_by}. Moving outside its footprint is an error.` : "Base elevation is absolute. Select a named horizontal surface to stack this feature.";
+        }
         if (item.editor_kind === "ramp") $("rampAscent").value = item.ascent;
         const pair = Core.rotatePoint(item.center, spec.symmetry.center); $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered feature"; $("pairPosition").textContent = item.mirror ? `Partner at X ${pair[0]}, Y ${pair[1]}` : "This feature builds once at the rotation center.";
       } else { $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered annotation"; $("pairPosition").textContent = item.mirror ? "The opposite annotation is locked." : "This annotation is invariant under rotation."; }
@@ -456,7 +473,7 @@
   $("gridSize").addEventListener("change", (event) => mutate(() => { Core.snapSpecToGrid(spec, Number(event.target.value)); }));
   [["spawnX", 0], ["spawnY", 1]].forEach(([id, index]) => $(id).addEventListener("change", (event) => mutate(() => { spec.spawns.ct.origin[index] = Core.snap(Number(event.target.value), Number(spec.sketch_settings.grid)); })));
   $("spawnYaw").addEventListener("change", (event) => mutate(() => { spec.spawns.ct.angles[1] = ((Number(event.target.value) % 360) + 360) % 360; }));
-  [["centerX", "center", 0], ["centerY", "center", 1], ["centerZ", "center", 2], ["sizeX", "size", 0], ["sizeY", "size", 1], ["sizeZ", "size", 2]].forEach(([id, field, index]) => $(id).addEventListener("change", (event) => mutate(() => {
+  [["centerX", "center", 0], ["centerY", "center", 1], ["sizeX", "size", 0], ["sizeY", "size", 1], ["sizeZ", "size", 2]].forEach(([id, field, index]) => $(id).addEventListener("change", (event) => mutate(() => {
     const item = selectedItem(); if (!item?.center) return; const value = Number(event.target.value);
     if (index < 2) { item[field][index] = value; Core.snapRectToGrid(item, spec); }
     else item[field][index] = field === "size" ? Math.max(16, Core.snap(value, 16)) : Core.snap(value, 16);
@@ -466,13 +483,15 @@
       else if (index === runAxis) item.size[2] = item.size[runAxis] / 2;
     }
   })));
+  $("baseZ").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item?.center || item.supported_by) return; item.base_z = Core.snap(Number(event.target.value), 16); }));
+  $("supportSelect").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item?.center) return; Core.setSupport(spec, item, event.target.value || null); }));
   $("rampAscent").addEventListener("change", (event) => mutate(() => {
     const item = selectedItem(); if (item?.editor_kind !== "ramp" || !Core.RAMP_DIRECTIONS.has(event.target.value)) return;
     const oldAxis = item.ascent.startsWith("x") ? 0 : 1; const newAxis = event.target.value.startsWith("x") ? 0 : 1;
     if (oldAxis !== newAxis) [item.size[0], item.size[1]] = [item.size[1], item.size[0]];
     item.ascent = event.target.value;
   }));
-  $("objectName").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item) return; item.name = Core.uniqueName(spec, event.target.value, item.name); selection.name = item.name; }));
+  $("objectName").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item) return; const previous = item.name; item.name = Core.uniqueName(spec, event.target.value, item.name); Core.allElements(spec).forEach((candidate) => { if (candidate.supported_by === previous) candidate.supported_by = item.name; }); selection.name = item.name; }));
   $("rotateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.size) return; [item.size[0], item.size[1]] = [item.size[1], item.size[0]]; if (item.editor_kind === "ramp") item.ascent = { "x+": "y+", "y+": "x-", "x-": "y-", "y-": "x+" }[item.ascent]; });
   $("duplicateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.center || item.editor_kind === "floor") return; const copy = Core.clone(item); copy.name = Core.uniqueName(spec, `${item.name}_copy`); const grid = Number(spec.sketch_settings.grid); copy.center[0] += grid; copy.center[1] += grid; copy.mirror = copy.center[0] !== 0 || copy.center[1] !== 0; Core.addElement(spec, copy); selection = { type: "element", name: copy.name }; selectedPair = false; });
   $("exportButton").onclick = () => { const data = JSON.stringify(Core.exportSpec(spec), null, 2) + "\n"; const blob = new Blob([data], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${spec.map_name}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 0); };
