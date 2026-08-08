@@ -6,9 +6,11 @@
   "use strict";
 
   const MATERIAL = "materials/dev/reflectivity_30.vmat";
-  const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated"]);
+  const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp"]);
   const RECT_KINDS = new Set([...GENERATOR_KINDS, "water_void", "stairs", "jump"]);
   const ANNOTATION_KINDS = new Set(["measure", "sightline"]);
+  const RAMP_DIRECTIONS = new Set(["x+", "x-", "y+", "y-"]);
+  const RAMP_OPPOSITES = { "x+": "x-", "x-": "x+", "y+": "y-", "y-": "y+" };
   const DEFAULT_GRID = 32;
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -135,9 +137,12 @@
     item.material ||= spec.allowed_materials[0];
     item.center = [Number(item.center?.[0] || 0), Number(item.center?.[1] || 0), Number(item.center?.[2] || 0)];
     item.size = [Number(item.size?.[0] || 32), Number(item.size?.[1] || 32), Number(item.size?.[2] || 32)];
+    if (item.editor_kind === "ramp") {
+      item.ascent = RAMP_DIRECTIONS.has(item.ascent) ? item.ascent : item.size[0] >= item.size[1] ? "x+" : "y+";
+    } else delete item.ascent;
     const atCenter = item.center[0] === spec.symmetry.center[0] && item.center[1] === spec.symmetry.center[1];
     item.mirror = item.editor_kind === "floor" ? false : !atCenter;
-    if (["elevated", "bridge", "stairs", "jump"].includes(item.editor_kind)) item.walkable_below = false;
+    if (["elevated", "bridge", "stairs", "jump", "ramp"].includes(item.editor_kind)) item.walkable_below = false;
     return snapRectToGrid(item, spec);
   }
 
@@ -177,6 +182,14 @@
         if (item.editor_kind !== "floor" && item.mirror === atCenter) errors.push(`${item.name} has an invalid symmetry setting.`);
       }
       if (item.editor_kind === "elevated" && item.walkable_below !== false) errors.push(`${item.name} must be single-surface elevation.`);
+      if (item.editor_kind === "ramp") {
+        if (!RAMP_DIRECTIONS.has(item.ascent)) errors.push(`${item.name} has an invalid ramp ascent direction.`);
+        else {
+          const runAxis = item.ascent.startsWith("x") ? 0 : 1;
+          if (item.size[runAxis] !== 2 * item.size[2]) errors.push(`${item.name} ramp run must equal twice its rise.`);
+        }
+        if (item.walkable_below !== false) errors.push(`${item.name} must be a solid ramp.`);
+      }
     });
     if (allElements(spec).length === 1) warnings.push("The draft contains only the arena floor.");
     if (spec.sketch_elements.length) warnings.push(`${spec.sketch_elements.length} sketch element${spec.sketch_elements.length === 1 ? "" : "s"} will need deliberate Hammer implementation.`);
@@ -191,7 +204,7 @@
   }
 
   return {
-    MATERIAL, DEFAULT_GRID, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, clone, defaultSpec,
+    MATERIAL, DEFAULT_GRID, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, RAMP_DIRECTIONS, RAMP_OPPOSITES, clone, defaultSpec,
     rotatePoint, pairedSpawn, cleanNumber, snap, snapRectToGrid, snapSpecToGrid, slug, allElements, allNamed, uniqueName,
     findElement, findAnnotation, addElement, removeElement, moveElementBucket,
     normalizeSpec, validateDraft, exportSpec,

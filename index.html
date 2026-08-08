@@ -31,6 +31,7 @@
       <button class="tool" data-tool="water_void" title="Draw impassable water or void (I)"><b>I</b><small>Water</small></button>
       <button class="tool" data-tool="bridge" title="Draw bridge (G)"><b>G</b><small>Bridge</small></button>
       <button class="tool" data-tool="elevated" title="Draw single-surface elevated region (E)"><b>E</b><small>Raised</small></button>
+      <button class="tool" data-tool="ramp" title="Draw solid 2:1 ramp (P)"><b>P</b><small>Ramp</small></button>
       <button class="tool" data-tool="stairs" title="Draw stairs footprint (R)"><b>R</b><small>Stairs</small></button>
       <button class="tool" data-tool="jump" title="Draw jump-up platform (J)"><b>J</b><small>Jump</small></button>
       <button class="tool" data-tool="spawn" title="Place CT spawn (S)"><b>S</b><small>Spawn</small></button>
@@ -76,6 +77,9 @@
           <div class="axis-grid" id="rectFields">
             <label>X<input id="centerX" type="number" step="16"></label><label>Y<input id="centerY" type="number" step="16"></label><label>Elevation<input id="centerZ" type="number" step="16"></label>
             <label>Width<input id="sizeX" type="number" min="16" step="32"></label><label>Depth<input id="sizeY" type="number" min="16" step="32"></label><label>Height<input id="sizeZ" type="number" min="16" step="16"></label>
+          </div>
+          <div id="rampFields" hidden>
+            <label>Ramp ascent<select id="rampAscent"><option value="x+">+X</option><option value="x-">-X</option><option value="y+">+Y</option><option value="y-">-Y</option></select></label>
           </div>
           <div class="selection-actions" id="rectActions"><button id="rotateButton" class="button ghost">Rotate 90°</button><button id="duplicateButton" class="button ghost">Duplicate</button></div>
           <div class="pair-note"><span class="pair-swatch"></span><div><strong id="pairTitle">Paired by rotation</strong><small id="pairPosition">Partner at X 0, Y 0</small></div></div>

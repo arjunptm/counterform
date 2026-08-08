@@ -12,20 +12,20 @@
     wall: { height: 192, base: "wall" }, cover: { height: 96, base: "cover" },
     low_cover: { height: 48, base: "low_cover" }, crate: { height: 128, base: "crate" },
     water_void: { height: 8, base: "water" }, bridge: { height: 16, base: "bridge" },
-    elevated: { height: 128, base: "raised_region" }, stairs: { height: 128, base: "stairs" },
+    elevated: { height: 128, base: "raised_region" }, ramp: { height: 128, base: "ramp" }, stairs: { height: 128, base: "stairs" },
     jump: { height: 64, base: "jump_platform" },
   };
   const labels = {
     floor: "Floor", wall: "Wall", cover: "Standing cover", low_cover: "Crouch cover",
     crate: "Crate", water_void: "Water / void", bridge: "Bridge", elevated: "Elevated region",
-    stairs: "Stairs", jump: "Jump platform", measure: "Measurement", sightline: "Sightline",
+    ramp: "Ramp", stairs: "Stairs", jump: "Jump platform", measure: "Measurement", sightline: "Sightline",
   };
   const visuals = {
     floor: ["rgba(67,78,70,.33)", "#475149"], wall: ["rgba(240,164,74,.34)", "#f0a44a"],
     cover: ["rgba(232,237,233,.25)", "#aab5ad"], low_cover: ["rgba(167,180,171,.20)", "#89958d"],
     crate: ["rgba(174,112,55,.42)", "#c98649"], water_void: ["rgba(55,135,180,.40)", "#54a8d1"],
     bridge: ["rgba(139,93,52,.50)", "#c8945a"], elevated: ["rgba(210,174,69,.22)", "#d6b54e"],
-    stairs: ["rgba(218,183,77,.28)", "#e0c05c"], jump: ["rgba(157,100,209,.28)", "#b783e7"],
+    ramp: ["rgba(101,163,119,.30)", "#79c98e"], stairs: ["rgba(218,183,77,.28)", "#e0c05c"], jump: ["rgba(157,100,209,.28)", "#b783e7"],
   };
 
   let spec = loadSaved();
@@ -154,6 +154,18 @@
     } else if (item.editor_kind === "stairs") {
       const vertical = rect.h >= rect.w; const count = Math.max(2, Math.floor((vertical ? rect.h : rect.w) / 12));
       for (let i = 1; i < count; i++) { const t = i / count; ctx.beginPath(); if (vertical) { const y = rect.y + rect.h * t; ctx.moveTo(rect.x, y); ctx.lineTo(rect.x + rect.w, y); } else { const x = rect.x + rect.w * t; ctx.moveTo(x, rect.y); ctx.lineTo(x, rect.y + rect.h); } ctx.stroke(); }
+    } else if (item.editor_kind === "ramp") {
+      const cx = rect.x + rect.w / 2; const cy = rect.y + rect.h / 2; const inset = 7;
+      let start; let end;
+      if (item.ascent === "x-") { start = [rect.x + rect.w - inset, cy]; end = [rect.x + inset, cy]; }
+      else if (item.ascent === "y+") { start = [cx, rect.y + rect.h - inset]; end = [cx, rect.y + inset]; }
+      else if (item.ascent === "y-") { start = [cx, rect.y + inset]; end = [cx, rect.y + rect.h - inset]; }
+      else { start = [rect.x + inset, cy]; end = [rect.x + rect.w - inset, cy]; }
+      const dx = end[0] - start[0]; const dy = end[1] - start[1]; const length = Math.max(1, Math.hypot(dx, dy));
+      const ux = dx / length; const uy = dy / length; const px = -uy; const py = ux;
+      ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(...start); ctx.lineTo(...end);
+      ctx.moveTo(end[0], end[1]); ctx.lineTo(end[0] - ux * 9 + px * 5, end[1] - uy * 9 + py * 5);
+      ctx.moveTo(end[0], end[1]); ctx.lineTo(end[0] - ux * 9 - px * 5, end[1] - uy * 9 - py * 5); ctx.stroke();
     } else if (item.editor_kind === "crate") {
       ctx.beginPath(); ctx.moveTo(rect.x, rect.y); ctx.lineTo(rect.x + rect.w, rect.y + rect.h); ctx.moveTo(rect.x + rect.w, rect.y); ctx.lineTo(rect.x, rect.y + rect.h); ctx.stroke();
     } else if (item.editor_kind === "bridge") {
@@ -174,9 +186,11 @@
     ctx.lineWidth = isSelected ? 2 : 1; if (paired) ctx.setLineDash([5, 4]);
     ctx.fillRect(rect.x, rect.y, rect.w, rect.h); ctx.strokeRect(rect.x + .5, rect.y + .5, Math.max(0, rect.w - 1), Math.max(0, rect.h - 1)); ctx.restore();
     if (!paired) drawPattern(item, rect);
+    else if (item.editor_kind === "ramp") drawPattern({ ...item, ascent: Core.RAMP_OPPOSITES[item.ascent] }, rect);
     if (item.editor_kind !== "floor" && rect.w > 48 && rect.h > 20) {
       ctx.save(); ctx.fillStyle = paired ? "rgba(200,240,74,.75)" : "#dce3de"; ctx.font = "9px ui-monospace, monospace"; ctx.textAlign = "center";
-      ctx.fillText(preview ? labels[item.editor_kind] : paired ? `${item.name} · pair` : item.name, rect.x + rect.w / 2, rect.y + rect.h / 2 + 3); ctx.restore();
+      const label = item.editor_kind === "ramp" ? paired ? "ramp · pair" : "ramp" : preview ? labels[item.editor_kind] : paired ? `${item.name} · pair` : item.name;
+      ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 3); ctx.restore();
     }
   }
 
@@ -287,12 +301,20 @@
     const grid = Number(spec.sketch_settings.grid);
     const start = [Core.snap(gesture.start.x, grid), Core.snap(gesture.start.y, grid)]; const end = [Core.snap(point.x, grid), Core.snap(point.y, grid)];
     for (let axis = 0; axis < 2; axis++) if (end[axis] === start[axis]) end[axis] += point[axis === 0 ? "x" : "y"] < start[axis] ? -grid : grid;
-    const center = [Core.cleanNumber((start[0] + end[0]) / 2), Core.cleanNumber((start[1] + end[1]) / 2), presets[tool].height / 2];
+    const size = [Math.max(grid, Math.abs(end[0] - start[0])), Math.max(grid, Math.abs(end[1] - start[1])), presets[tool].height];
+    let ascent;
+    if (tool === "ramp") {
+      const runAxis = size[0] >= size[1] ? 0 : 1;
+      ascent = `${runAxis === 0 ? "x" : "y"}${end[runAxis] >= start[runAxis] ? "+" : "-"}`;
+      size[2] = size[runAxis] / 2;
+    }
+    const center = [Core.cleanNumber((start[0] + end[0]) / 2), Core.cleanNumber((start[1] + end[1]) / 2), size[2] / 2];
     if (tool === "water_void") center[2] = -presets[tool].height / 2;
     gesture.preview = {
-      name: "new", center, size: [Math.max(grid, Math.abs(end[0] - start[0])), Math.max(grid, Math.abs(end[1] - start[1])), presets[tool].height],
+      name: "new", center, size,
       material: spec.allowed_materials[0], mirror: center[0] !== 0 || center[1] !== 0, editor_kind: tool,
-      walkable_below: ["bridge", "elevated", "stairs", "jump"].includes(tool) ? false : undefined,
+      walkable_below: ["bridge", "elevated", "ramp", "stairs", "jump"].includes(tool) ? false : undefined,
+      ascent,
     };
   }
 
@@ -327,13 +349,17 @@
       const rect = Boolean(item.center); $("selectionTitle").textContent = rect ? "Selected feature" : "Selected annotation";
       $("typeBadge").textContent = labels[item.editor_kind] || item.editor_kind; $("objectName").value = item.name;
       $("rectFields").hidden = !rect; $("rectActions").hidden = !rect;
+      $("rampFields").hidden = !rect || item.editor_kind !== "ramp";
       const generatorReady = rect && Core.GENERATOR_KINDS.has(item.editor_kind);
       $("buildBadge").textContent = generatorReady ? "Blockout-ready" : "Sketch-only"; $("buildBadge").classList.toggle("sketch-only", !generatorReady);
       if (rect) {
         ["centerX", "centerY", "centerZ"].forEach((id, i) => $(id).value = item.center[i]); ["sizeX", "sizeY", "sizeZ"].forEach((id, i) => $(id).value = item.size[i]);
+        if (item.editor_kind === "ramp") $("rampAscent").value = item.ascent;
         const pair = Core.rotatePoint(item.center, spec.symmetry.center); $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered feature"; $("pairPosition").textContent = item.mirror ? `Partner at X ${pair[0]}, Y ${pair[1]}` : "This feature builds once at the rotation center.";
       } else { $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered annotation"; $("pairPosition").textContent = item.mirror ? "The opposite annotation is locked." : "This annotation is invariant under rotation."; }
-      $("surfaceNote").hidden = !["elevated", "bridge", "stairs", "jump"].includes(item.editor_kind);
+      $("surfaceNote").hidden = !["elevated", "bridge", "ramp", "stairs", "jump"].includes(item.editor_kind);
+      if (item.editor_kind === "ramp") $("surfaceNote").textContent = "Solid 2:1 ramp: the run must remain exactly twice the rise.";
+      else $("surfaceNote").textContent = "Single walkable surface: no playable space is expected underneath this feature.";
     }
     const sources = Core.allElements(spec).length; const built = Core.allElements(spec).reduce((sum, item) => sum + (item.mirror ? 2 : 1), 0);
     $("objectCount").textContent = `${sources} source feature${sources === 1 ? "" : "s"} · ${built} visible`;
@@ -434,9 +460,20 @@
     const item = selectedItem(); if (!item?.center) return; const value = Number(event.target.value);
     if (index < 2) { item[field][index] = value; Core.snapRectToGrid(item, spec); }
     else item[field][index] = field === "size" ? Math.max(16, Core.snap(value, 16)) : Core.snap(value, 16);
+    if (item.editor_kind === "ramp" && field === "size") {
+      const runAxis = item.ascent.startsWith("x") ? 0 : 1;
+      if (index === 2) { item.size[runAxis] = 2 * item.size[2]; Core.snapRectToGrid(item, spec); }
+      else if (index === runAxis) item.size[2] = item.size[runAxis] / 2;
+    }
   })));
+  $("rampAscent").addEventListener("change", (event) => mutate(() => {
+    const item = selectedItem(); if (item?.editor_kind !== "ramp" || !Core.RAMP_DIRECTIONS.has(event.target.value)) return;
+    const oldAxis = item.ascent.startsWith("x") ? 0 : 1; const newAxis = event.target.value.startsWith("x") ? 0 : 1;
+    if (oldAxis !== newAxis) [item.size[0], item.size[1]] = [item.size[1], item.size[0]];
+    item.ascent = event.target.value;
+  }));
   $("objectName").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item) return; item.name = Core.uniqueName(spec, event.target.value, item.name); selection.name = item.name; }));
-  $("rotateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.size) return; [item.size[0], item.size[1]] = [item.size[1], item.size[0]]; });
+  $("rotateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.size) return; [item.size[0], item.size[1]] = [item.size[1], item.size[0]]; if (item.editor_kind === "ramp") item.ascent = { "x+": "y+", "y+": "x-", "x-": "y-", "y-": "x+" }[item.ascent]; });
   $("duplicateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.center || item.editor_kind === "floor") return; const copy = Core.clone(item); copy.name = Core.uniqueName(spec, `${item.name}_copy`); const grid = Number(spec.sketch_settings.grid); copy.center[0] += grid; copy.center[1] += grid; copy.mirror = copy.center[0] !== 0 || copy.center[1] !== 0; Core.addElement(spec, copy); selection = { type: "element", name: copy.name }; selectedPair = false; });
   $("exportButton").onclick = () => { const data = JSON.stringify(Core.exportSpec(spec), null, 2) + "\n"; const blob = new Blob([data], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${spec.map_name}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 0); };
   $("fileInput").addEventListener("change", async (event) => { const file = event.target.files[0]; if (!file) return; try { const loaded = Core.normalizeSpec(JSON.parse(await file.text())); remember(); spec = loaded; selection = null; selectedPair = false; zoom = 1; pan = { x: 0, y: 0 }; commit(); runValidation(); } catch (error) { alert(`Could not open design: ${error.message}`); } event.target.value = ""; });
@@ -448,7 +485,7 @@
     if (event.key === "Delete" || event.key === "Backspace") removeSelected();
     else if (event.key === "Escape" || event.key.toLowerCase() === "v") setTool("select");
     else if (event.ctrlKey && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
-    else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", i: "water_void", g: "bridge", e: "elevated", r: "stairs", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
+    else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", i: "water_void", g: "bridge", e: "elevated", p: "ramp", r: "stairs", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
   });
   document.addEventListener("keyup", (event) => { if (event.code === "Space") { spacePressed = false; if (gesture?.type !== "pan-view") canvas.style.cursor = panMode ? "grab" : tool === "select" ? "default" : "crosshair"; } });
 

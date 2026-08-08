@@ -11,4 +11,5 @@ published from the private map-generation repository and should not be edited
 directly.
 
 The editor runs entirely in the browser. Designs are saved in local browser
-storage and can be exported or reopened as JSON.
+storage and can be exported or reopened as JSON. Its blockout palette includes
+cardinal-direction ramps with a validated fixed 2:1 run-to-rise slope.
