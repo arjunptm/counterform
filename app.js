@@ -366,10 +366,13 @@
         ["centerX", "centerY"].forEach((id, i) => $(id).value = item.center[i]); $("baseZ").value = Core.itemBaseZ(item); ["sizeX", "sizeY", "sizeZ"].forEach((id, i) => $(id).value = item.size[i]);
         $("baseZ").disabled = Boolean(item.supported_by);
         if (supportable) {
-          const supports = Core.allElements(spec).filter((candidate) => candidate !== item && Core.SUPPORT_KINDS.has(candidate.editor_kind));
-          $("supportSelect").innerHTML = '<option value="">Absolute base elevation</option>' + supports.map((candidate) => `<option value="${candidate.name}">${candidate.name} · top Z ${Core.itemTopZ(candidate)}</option>`).join("");
+          const supports = Core.supportCandidates(spec, item);
+          $("supportSelect").innerHTML = '<option value="">Custom elevation (not attached)</option>' + supports.map((candidate) => {
+            const surface = candidate.editor_kind === "floor" ? "Ground" : labels[candidate.editor_kind] || candidate.editor_kind;
+            return `<option value="${candidate.name}">${surface} — ${candidate.name} · top Z ${Core.itemTopZ(candidate)}</option>`;
+          }).join("");
           $("supportSelect").value = item.supported_by || "";
-          $("supportNote").textContent = item.supported_by ? `Base Z follows ${item.supported_by}. Moving outside its footprint is an error.` : "Base elevation is absolute. Select a named horizontal surface to stack this feature.";
+          $("supportNote").textContent = item.supported_by ? `Attached to ${item.supported_by}; base elevation follows its top surface.` : "Custom elevation is an unattached numeric height. Only surfaces containing this feature's footprint are listed.";
         }
         if (item.editor_kind === "ramp") $("rampAscent").value = item.ascent;
         const pair = Core.rotatePoint(item.center, spec.symmetry.center); $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered feature"; $("pairPosition").textContent = item.mirror ? `Partner at X ${pair[0]}, Y ${pair[1]}` : "This feature builds once at the rotation center.";

@@ -11,7 +11,10 @@
   const ANNOTATION_KINDS = new Set(["measure", "sightline"]);
   const RAMP_DIRECTIONS = new Set(["x+", "x-", "y+", "y-"]);
   const RAMP_OPPOSITES = { "x+": "x-", "x-": "x+", "y+": "y-", "y-": "y+" };
-  const SUPPORT_KINDS = new Set(["floor", "bridge", "elevated"]);
+  // Any generated cuboid with a horizontal top can be an explicit support.
+  // Sloped/stepped features are intentionally excluded because one top-Z value
+  // cannot describe their walking surface.
+  const SUPPORT_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated"]);
   const SUPPORTABLE_KINDS = new Set(["wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "jump"]);
   const SOLID_KINDS = new Set([...GENERATOR_KINDS, "stairs", "jump"]);
   const DEFAULT_GRID = 32;
