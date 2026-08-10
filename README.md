@@ -7,7 +7,9 @@ Config** for a human-readable persistent server CFG, or use both independently
 in the same project. Match Config includes searchable curated settings, four
 presets, semantic warnings, a live match-duration/behavior preview, editable
 JSON, and commented `.cfg` export. One-shot and arbitrary commands are excluded.
-See the [Match Config guide](MATCH_CONFIG_GUIDE.md) for the complete workflow.
+The CFG itself can be reopened for editing; unknown lines are preserved as
+unmanaged commands. See the [Match Config guide](MATCH_CONFIG_GUIDE.md) for the
+complete workflow.
 
 Canvas geometry snaps to a selectable Hammer-unit grid. Zoom around the pointer,
 then use **Pan**, middle-mouse drag, or Space-drag to navigate; **Fit** restores

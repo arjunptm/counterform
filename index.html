@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,11 +22,11 @@
     <div class="file-actions" id="configActions" hidden>
       <span id="cfgSaveState" class="save-state">Config saved in this browser</span>
       <button id="cfgNewButton" class="button ghost">New</button>
-      <label class="button ghost" for="cfgFileInput">Open config</label>
-      <input id="cfgFileInput" type="file" accept="application/json,.json" hidden>
-      <button id="cfgSaveJsonButton" class="button ghost">Save config JSON</button>
+      <label class="button ghost" for="cfgFileInput">Open CFG</label>
+      <input id="cfgFileInput" type="file" accept="text/plain,.cfg" hidden>
       <button id="cfgExportButton" class="button primary">Download CFG</button>
     </div>
+    <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light theme">Light</button>
   </header>
 
   <main class="workspace" id="sketchWorkspace">
@@ -132,11 +132,13 @@
     <aside class="match-preview" aria-label="Live match preview">
       <div class="preview-heading"><div><span class="eyebrow">LIVE PREVIEW</span><h2>What this match becomes</h2></div><span id="cfgPresetBadge" class="preview-badge">Custom</span></div>
       <section class="preview-hero"><span>Configured regulation maximum</span><strong id="previewDuration">Not enough settings</strong><small>Actual play is often shorter because eliminations end rounds early.</small></section>
-      <section class="preview-section"><div class="preview-title"><span>Match structure</span><strong id="previewRoundCount">Rounds not specified</strong></div><div id="previewTimeline" class="round-timeline"></div><div id="previewTiming" class="timing-breakdown"></div></section>
+      <section class="preview-section timeline-section"><div class="preview-title"><span>Match timeline</span><strong id="previewRoundCount">Rounds not specified</strong></div><div id="previewTimeline" class="round-timeline"></div><div id="previewTiming" class="timing-breakdown"></div></section>
       <section class="preview-section"><div class="preview-title"><span>When the match starts</span></div><ol id="previewSequence" class="match-sequence"></ol></section>
       <section class="preview-section preview-split"><div><span class="preview-label">Teams</span><div id="previewTeams" class="preview-copy"></div></div><div><span class="preview-label">Bots</span><div id="previewBots" class="preview-copy"></div></div></section>
       <section class="preview-section"><div class="preview-title"><span>Weapons & economy</span></div><div id="previewLoadouts" class="loadout-grid"></div><div id="previewEconomy" class="preview-copy"></div></section>
       <section id="previewWarningsSection" class="preview-section warning-section" hidden><div class="preview-title"><span>Check before export</span><strong id="previewWarningCount"></strong></div><ul id="previewWarnings"></ul></section>
+      <section id="unmanagedSection" class="preview-section unmanaged-section" hidden><div class="preview-title"><span>Preserved unmanaged lines</span><strong id="unmanagedCount"></strong></div><p>Counterform does not interpret these commands. They remain byte-for-byte lines in the downloaded CFG.</p><pre id="unmanagedLines"></pre></section>
+      <section class="preview-section run-guide"><div class="preview-title"><span>Use in CS2</span></div><ol><li>Download the CFG.</li><li>Place it in the host installation's appropriate <code>game\csgo\cfg</code> folder.</li><li>After the game-mode CFG loads, run <code id="execCommand">exec counterform_match</code>.</li></ol><small>Execution order matters: later CFGs can override earlier values.</small></section>
       <details class="cfg-output"><summary>Technical CFG preview</summary><div><button id="cfgCopyButton" class="text-button">Copy CFG</button><pre id="cfgCode"></pre></div></details>
     </aside>
   </main>

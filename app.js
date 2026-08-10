@@ -27,6 +27,16 @@
     bridge: ["rgba(139,93,52,.50)", "#c8945a"], elevated: ["rgba(210,174,69,.22)", "#d6b54e"],
     ramp: ["rgba(101,163,119,.30)", "#79c98e"], stairs: ["rgba(218,183,77,.28)", "#e0c05c"], jump: ["rgba(157,100,209,.28)", "#b783e7"],
   };
+  const lightVisuals = {
+    floor: ["rgba(67,78,70,.12)", "#65736a"], wall: ["rgba(184,91,0,.18)", "#9a4d00"],
+    cover: ["rgba(58,75,64,.14)", "#3e5044"], low_cover: ["rgba(76,94,82,.12)", "#526759"],
+    crate: ["rgba(154,82,21,.20)", "#88450d"], water_void: ["rgba(15,111,160,.18)", "#0b6793"],
+    bridge: ["rgba(137,76,22,.18)", "#7f4616"], elevated: ["rgba(145,108,0,.17)", "#765900"],
+    ramp: ["rgba(27,120,57,.16)", "#1b7438"], stairs: ["rgba(137,99,0,.17)", "#705300"], jump: ["rgba(105,52,151,.15)", "#693397"],
+  };
+
+  function themeColor(name, fallback) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback; }
+  function objectVisuals(kind) { const palette = document.documentElement.dataset.theme === "light" ? lightVisuals : visuals; return palette[kind] || palette.cover; }
 
   let spec = loadSaved();
   let tool = "select";
@@ -128,14 +138,14 @@
     const top = screenToWorld(v.rect.left, v.rect.top).y; const bottom = screenToWorld(v.rect.left, v.rect.bottom).y;
     ctx.lineWidth = 1;
     for (let x = Math.floor(left / visible) * visible; x <= right; x += visible) {
-      const p = worldToScreen(x, 0); ctx.strokeStyle = x === 0 ? "#4a554d" : "#1b211d";
+      const p = worldToScreen(x, 0); ctx.strokeStyle = x === 0 ? themeColor("--canvas-axis", "#4a554d") : themeColor("--canvas-grid", "#1b211d");
       ctx.beginPath(); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, v.rect.height); ctx.stroke();
     }
     for (let y = Math.floor(bottom / visible) * visible; y <= top; y += visible) {
-      const p = worldToScreen(0, y); ctx.strokeStyle = y === 0 ? "#4a554d" : "#1b211d";
+      const p = worldToScreen(0, y); ctx.strokeStyle = y === 0 ? themeColor("--canvas-axis", "#4a554d") : themeColor("--canvas-grid", "#1b211d");
       ctx.beginPath(); ctx.moveTo(0, p.y); ctx.lineTo(v.rect.width, p.y); ctx.stroke();
     }
-    const c = worldToScreen(...spec.symmetry.center); ctx.strokeStyle = "rgba(200,240,74,.6)";
+    const c = worldToScreen(...spec.symmetry.center); ctx.strokeStyle = themeColor("--canvas-center", "rgba(200,240,74,.6)");
     ctx.beginPath(); ctx.arc(c.x, c.y, 10, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(c.x - 15, c.y); ctx.lineTo(c.x + 15, c.y); ctx.moveTo(c.x, c.y - 15); ctx.lineTo(c.x, c.y + 15); ctx.stroke();
   }
@@ -148,7 +158,7 @@
   }
 
   function drawPattern(item, rect) {
-    ctx.save(); ctx.strokeStyle = visuals[item.editor_kind]?.[1] || "#aab5ad"; ctx.globalAlpha = .55; ctx.lineWidth = 1;
+    ctx.save(); ctx.strokeStyle = objectVisuals(item.editor_kind)[1]; ctx.globalAlpha = document.documentElement.dataset.theme === "light" ? .78 : .55; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
     if (item.editor_kind === "water_void") {
       for (let y = rect.y + 8; y < rect.y + rect.h; y += 12) { ctx.beginPath(); ctx.moveTo(rect.x + 5, y); ctx.bezierCurveTo(rect.x + rect.w * .3, y - 4, rect.x + rect.w * .7, y + 4, rect.x + rect.w - 5, y); ctx.stroke(); }
@@ -181,15 +191,15 @@
   }
 
   function drawObject(item, paired = false, preview = false) {
-    const rect = objectRect(item, paired); const colors = visuals[item.editor_kind] || visuals.cover;
+    const rect = objectRect(item, paired); const colors = objectVisuals(item.editor_kind);
     const isSelected = selection?.type === "element" && selection.name === item.name && selectedPair === paired;
-    ctx.save(); ctx.fillStyle = paired ? "rgba(200,240,74,.09)" : colors[0]; ctx.strokeStyle = paired ? "rgba(200,240,74,.72)" : isSelected ? "#c8f04a" : colors[1];
+    ctx.save(); ctx.fillStyle = paired ? themeColor("--canvas-paired-fill", "rgba(200,240,74,.09)") : colors[0]; ctx.strokeStyle = paired ? themeColor("--canvas-paired-stroke", "rgba(200,240,74,.72)") : isSelected ? themeColor("--canvas-selected", "#c8f04a") : colors[1];
     ctx.lineWidth = isSelected ? 2 : 1; if (paired) ctx.setLineDash([5, 4]);
     ctx.fillRect(rect.x, rect.y, rect.w, rect.h); ctx.strokeRect(rect.x + .5, rect.y + .5, Math.max(0, rect.w - 1), Math.max(0, rect.h - 1)); ctx.restore();
     if (!paired) drawPattern(item, rect);
     else if (item.editor_kind === "ramp") drawPattern({ ...item, ascent: Core.RAMP_OPPOSITES[item.ascent] }, rect);
     if (item.editor_kind !== "floor" && rect.w > 48 && rect.h > 20) {
-      ctx.save(); ctx.fillStyle = paired ? "rgba(200,240,74,.75)" : "#dce3de"; ctx.font = "9px ui-monospace, monospace"; ctx.textAlign = "center";
+      ctx.save(); ctx.fillStyle = paired ? themeColor("--canvas-paired-stroke", "rgba(200,240,74,.75)") : themeColor("--canvas-label", "#dce3de"); ctx.font = "9px ui-monospace, monospace"; ctx.textAlign = "center";
       const label = item.editor_kind === "ramp" ? paired ? "ramp · pair" : "ramp" : preview ? labels[item.editor_kind] : paired ? `${item.name} · pair` : item.name;
       ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 3); ctx.restore();
     }
@@ -203,25 +213,25 @@
   function drawAnnotation(item, paired = false) {
     const [a, b] = annotationPoints(item, paired); const start = worldToScreen(a[0], a[1]); const end = worldToScreen(b[0], b[1]);
     const selected = selection?.type === "annotation" && selection.name === item.name && selectedPair === paired;
-    ctx.save(); ctx.strokeStyle = paired ? "rgba(200,240,74,.65)" : item.editor_kind === "measure" ? "#79c6ef" : "#ef6a5b";
+    ctx.save(); ctx.strokeStyle = paired ? themeColor("--canvas-paired-stroke", "rgba(200,240,74,.65)") : item.editor_kind === "measure" ? "#1678a8" : "#c33c31";
     ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = selected ? 3 : 2; ctx.setLineDash(item.editor_kind === "sightline" ? [8, 5] : [3, 3]);
     ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke(); ctx.setLineDash([]);
     const distance = Math.hypot(b[0] - a[0], b[1] - a[1]); const label = item.editor_kind === "measure" ? `${Math.round(distance)} u · ${(distance * .0254).toFixed(1)} m` : "sightline";
     ctx.font = "700 9px ui-monospace, monospace"; ctx.textAlign = "center"; ctx.fillText(label, (start.x + end.x) / 2, (start.y + end.y) / 2 - 7);
-    if (selected) for (const p of [start, end]) { ctx.fillStyle = "#0d100e"; ctx.strokeStyle = "#c8f04a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    if (selected) for (const p of [start, end]) { ctx.fillStyle = themeColor("--canvas-handle-fill", "#0d100e"); ctx.strokeStyle = themeColor("--canvas-handle-stroke", "#c8f04a"); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
     ctx.restore();
   }
 
   function drawSpawn(spawn, label, color, selected) {
     const p = worldToScreen(spawn.origin[0], spawn.origin[1]); const yaw = spawn.angles[1] * Math.PI / 180;
-    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(-yaw); ctx.fillStyle = color; ctx.strokeStyle = selected ? "#c8f04a" : color; ctx.lineWidth = selected ? 3 : 0;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(-yaw); ctx.fillStyle = color; ctx.strokeStyle = selected ? themeColor("--canvas-selected", "#c8f04a") : color; ctx.lineWidth = selected ? 3 : 0;
     ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-8, -8); ctx.lineTo(-5, 0); ctx.lineTo(-8, 8); ctx.closePath(); ctx.fill(); if (selected) ctx.stroke();
     ctx.rotate(yaw); ctx.font = "700 9px ui-sans-serif"; ctx.textAlign = "center"; ctx.fillText(label, 0, -14); ctx.restore();
   }
 
   function drawHandles() {
     if (selection?.type !== "element") return; const item = Core.findElement(spec, selection.name); if (!item) return;
-    const rect = objectRect(item, selectedPair); ctx.save(); ctx.fillStyle = "#c8f04a"; ctx.strokeStyle = "#111513"; ctx.lineWidth = 1;
+    const rect = objectRect(item, selectedPair); ctx.save(); ctx.fillStyle = themeColor("--canvas-selected", "#c8f04a"); ctx.strokeStyle = themeColor("--canvas-handle-fill", "#111513"); ctx.lineWidth = 1;
     for (const [sx, sy] of cornerSigns) { const x = sx < 0 ? rect.x : rect.x + rect.w; const y = sy < 0 ? rect.y : rect.y + rect.h; ctx.fillRect(x - 5, y - 5, 10, 10); ctx.strokeRect(x - 5, y - 5, 10, 10); } ctx.restore();
   }
 
@@ -510,6 +520,7 @@
     else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", i: "water_void", g: "bridge", e: "elevated", p: "ramp", r: "stairs", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
   });
   document.addEventListener("keyup", (event) => { if (event.code === "Space") { spacePressed = false; if (gesture?.type !== "pan-view") canvas.style.cursor = panMode ? "grab" : tool === "select" ? "default" : "crosshair"; } });
+  window.addEventListener("counterform-theme-change", draw);
 
   new ResizeObserver(resizeCanvas).observe($("canvasShell")); syncUI(); runValidation(); resizeCanvas();
 })();

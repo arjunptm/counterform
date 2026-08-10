@@ -3,6 +3,7 @@
   const Core = window.CounterformCfgCore;
   const STORAGE_KEY = "counterform.match-config.v1";
   const WORKSPACE_KEY = "counterform.workspace.v1";
+  const THEME_KEY = "counterform.theme.v1";
   const $ = (id) => document.getElementById(id);
   let config = loadConfig();
   let category = "all";
@@ -63,11 +64,12 @@
     $("cfgEmpty").hidden = entries.length > 0;
     $("cfgSettings").innerHTML = entries.map((entry) => {
       const state = Core.settingState(config, entry.id);
+      const explanation = Core.settingExplanation(entry, state);
       return `<article class="setting-card ${state.enabled ? "enabled" : ""}" data-card="${entry.id}">
         <div class="setting-card-head"><div><span class="setting-category">${escapeHtml(Core.CATEGORIES.find((item) => item.id === entry.category)?.label || entry.category)}</span><h3>${escapeHtml(entry.label)}</h3></div><label class="include-setting"><input aria-label="Include ${escapeHtml(entry.label)}" data-enable="${entry.id}" type="checkbox"${state.enabled ? " checked" : ""}><span>Include</span></label></div>
         <p>${escapeHtml(entry.description)}</p>
         <div class="setting-control">${settingControl(entry, state)}</div>
-        <details><summary>Technical detail</summary><div class="technical-detail"><code>${entry.cvars.map(escapeHtml).join(" · ")}</code><span>Exported only while Include is checked.</span></div></details>
+        <details><summary>What this choice does</summary><div class="technical-detail"><strong>${escapeHtml(explanation.selected)}</strong><span>${escapeHtml(explanation.technical)}</span><span class="baseline-note">${escapeHtml(explanation.baseline)}</span><code>${entry.cvars.map(escapeHtml).join(" · ")}</code></div></details>
       </article>`;
     }).join("");
   }
@@ -85,7 +87,12 @@
       ? `<div class="round-run">${Array.from({ length: count }, (_, index) => `<i title="Round ${start + index}">${start + index}</i>`).join("")}</div>`
       : `<div class="round-run compressed"><i>${count} rounds</i></div>`;
     const second = preview.halftime && preview.secondHalf ? `<div class="halftime-marker"><span>HALFTIME</span><b>CT ⇄ T</b></div>${half(preview.secondHalf, preview.firstHalf + 1)}` : "";
-    $("previewTimeline").innerHTML = `${half(preview.halftime ? preview.firstHalf : preview.rounds, 1)}${second}${preview.overtime ? '<div class="overtime-marker">Overtime if tied</div>' : ""}`;
+    const cycle = Math.max(1, preview.freeze + (preview.play || 0) + preview.transition);
+    const width = (value) => `${Math.max(value > 0 ? 3 : 0, value / cycle * 100)}%`;
+    const buy = Number(Core.settingState(config, "buy_time").enabled ? Core.settingState(config, "buy_time").value : 0);
+    const win = Number(Core.settingState(config, "win_panel_time").enabled ? Core.settingState(config, "win_panel_time").value : 0);
+    const detail = preview.play === null ? "" : `<div class="round-detail"><div class="detail-label"><span>One configured round</span><b>${Core.formatDuration(cycle)}</b></div><div class="primary-track"><i class="freeze" style="width:${width(preview.freeze)}">${preview.freeze ? `Freeze ${preview.freeze}s` : ""}</i><i class="live" style="width:${width(preview.play)}">Live ${preview.play}s</i><i class="transition" style="width:${width(preview.transition)}">${preview.transition ? `Next ${preview.transition}s` : ""}</i></div><div class="secondary-track"><span>Buy window</span><i class="${buy ? "buy" : "off"}" style="width:${width(Math.min(buy, cycle))}">${buy ? `${buy}s` : "Off"}</i></div><div class="secondary-track"><span>Win panel</span><i class="${win ? "win" : "off"}" style="width:${width(Math.min(win, cycle))}">${win ? `${win}s` : "Off"}</i></div><div class="timeline-legend"><span><i class="freeze"></i>Freeze</span><span><i class="live"></i>Live play</span><span><i class="transition"></i>Transition</span><span><i class="buy"></i>Buying</span><span><i class="win"></i>Win panel</span></div></div>`;
+    $("previewTimeline").innerHTML = `${detail}<div class="match-halves">${half(preview.halftime ? preview.firstHalf : preview.rounds, 1)}${second}${preview.overtime ? '<div class="overtime-marker">Overtime if tied</div>' : ""}</div>`;
   }
 
   function renderPreview() {
@@ -132,6 +139,10 @@
     $("previewWarningsSection").hidden = messages.length === 0;
     $("previewWarningCount").textContent = messages.length ? String(messages.length) : "";
     $("previewWarnings").innerHTML = messages.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+    $("unmanagedSection").hidden = preview.unmanagedCount === 0;
+    $("unmanagedCount").textContent = preview.unmanagedCount ? `${preview.unmanagedCount} line${preview.unmanagedCount === 1 ? "" : "s"}` : "";
+    $("unmanagedLines").textContent = (config.unmanaged_lines || []).join("\n");
+    $("execCommand").textContent = `exec ${Core.slug(config.config_name)}`;
     try { $("cfgCode").textContent = Core.exportCfg(config); } catch (error) { $("cfgCode").textContent = `// Cannot export yet\n// ${error.message}\n`; }
     $("cfgEnabledCount").textContent = `${preview.enabledCount} setting${preview.enabledCount === 1 ? "" : "s"} included`;
   }
@@ -171,8 +182,7 @@
     }
   });
   $("cfgName").addEventListener("change", (event) => { config.config_name = Core.slug(event.target.value); config.preset = "custom"; commitConfig(); });
-  $("cfgNewButton").addEventListener("click", () => { if (!window.confirm("Start a blank match config? Your current config remains saved only if you downloaded its JSON.")) return; config = Core.newConfig("blank"); config.config_name = "counterform_match"; category = "all"; query = ""; $("cfgSearch").value = ""; commitConfig(); });
-  $("cfgSaveJsonButton").addEventListener("click", () => downloadText(`${Core.slug(config.config_name)}.counterform.json`, `${JSON.stringify(config, null, 2)}\n`, "application/json"));
+  $("cfgNewButton").addEventListener("click", () => { if (!window.confirm("Start a blank match config? Download the current CFG first if you want a portable copy.")) return; config = Core.newConfig("blank"); config.config_name = "counterform_match"; category = "all"; query = ""; $("cfgSearch").value = ""; commitConfig(); });
   $("cfgExportButton").addEventListener("click", () => {
     const report = Core.validateConfig(config); if (report.errors.length) { window.alert(report.errors.join("\n")); return; }
     downloadText(`${Core.slug(config.config_name)}.cfg`, Core.exportCfg(config), "text/plain");
@@ -182,9 +192,20 @@
   });
   $("cfgFileInput").addEventListener("change", (event) => {
     const file = event.target.files?.[0]; if (!file) return;
-    const reader = new FileReader(); reader.onload = () => { try { config = Core.normalizeConfig(JSON.parse(reader.result)); category = "all"; query = ""; $("cfgSearch").value = ""; commitConfig(); } catch (error) { window.alert(error.message); } }; reader.readAsText(file); event.target.value = "";
+    const reader = new FileReader(); reader.onload = () => { try { config = Core.parseCfg(reader.result, file.name); category = "all"; query = ""; $("cfgSearch").value = ""; commitConfig(); } catch (error) { window.alert(error.message); } }; reader.readAsText(file); event.target.value = "";
   });
 
+  function applyTheme(theme) {
+    const chosen = theme === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = chosen;
+    $("themeToggle").textContent = chosen === "dark" ? "Light" : "Dark";
+    $("themeToggle").setAttribute("aria-label", `Switch to ${chosen === "dark" ? "light" : "dark"} theme`);
+    localStorage.setItem(THEME_KEY, chosen);
+    window.dispatchEvent(new CustomEvent("counterform-theme-change", { detail: { theme: chosen } }));
+  }
+  $("themeToggle").addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+
+  applyTheme(localStorage.getItem(THEME_KEY) || "dark");
   render();
   switchWorkspace(localStorage.getItem(WORKSPACE_KEY) || "sketch");
 })();
