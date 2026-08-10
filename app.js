@@ -1,6 +1,13 @@
-(function () {
+(async function () {
   "use strict";
   const Core = window.MapSketchCore;
+  try {
+    const response = await fetch("material-themes.json", { cache: "no-cache" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    Core.configureMaterialThemes(await response.json());
+  } catch (error) {
+    console.error("Could not load stock material themes; using Blockout only.", error);
+  }
   const STORAGE_KEY = "counterform.sketch.v3";
   const LEGACY_STORAGE_KEYS = ["counterform.sketch.v2", "counterform.sketch.v1"];
   const $ = (id) => document.getElementById(id);
@@ -323,7 +330,7 @@
     let baseZ = tool === "water_void" ? -presets[tool].height : 0;
     gesture.preview = {
       name: "new", center, size, base_z: baseZ, supported_by: null,
-      material: spec.allowed_materials[0], mirror: center[0] !== 0 || center[1] !== 0, editor_kind: tool,
+      material: Core.materialForKind(spec.material_theme, tool, spec.allowed_materials[0]), mirror: center[0] !== 0 || center[1] !== 0, editor_kind: tool,
       walkable_below: ["bridge", "elevated", "ramp", "stairs", "jump"].includes(tool) ? false : undefined,
       ascent,
     };
@@ -359,7 +366,16 @@
   function syncUI() {
     $("mapTitle").textContent = spec.map_name; $("mapName").value = spec.map_name; $("gridSize").value = String(spec.sketch_settings.grid);
     const grid = Number(spec.sketch_settings.grid); for (const id of ["centerX", "centerY"]) $(id).step = String(grid / 2); for (const id of ["sizeX", "sizeY", "spawnX", "spawnY"]) $(id).step = String(grid);
-    $("materialSelect").innerHTML = spec.allowed_materials.map((m) => `<option>${m}</option>`).join("");
+    const themes = Core.materialThemes();
+    $("materialTheme").innerHTML = (spec.material_theme === Core.LEGACY_CUSTOM_THEME ? '<option value="legacy_custom">Imported materials</option>' : "") + themes.map((theme) => `<option value="${theme.id}">${theme.label}</option>`).join("");
+    $("materialTheme").value = spec.material_theme;
+    const theme = Core.themeById(spec.material_theme);
+    $("themeDescription").textContent = theme?.description || "These imported materials stay unchanged until you select a stock theme.";
+    const roleLabels = { floor: "Floor", wall: "Walls", cover: "Cover", crate: "Crates", bridge: "Bridges", ramp: "Ramps" };
+    $("themeRoles").innerHTML = theme ? Object.entries(roleLabels).map(([kind, label]) => {
+      const path = theme.materials[kind]; const filename = path.split("/").pop().replace(/\.vmat$/, "");
+      return `<span><strong>${label}</strong><small>${filename}</small></span>`;
+    }).join("") : '<span class="legacy-theme-note">Select a stock theme to replace every object material.</span>';
     $("spawnX").value = spec.spawns.ct.origin[0]; $("spawnY").value = spec.spawns.ct.origin[1]; $("spawnYaw").value = spec.spawns.ct.angles[1];
     const item = selectedItem(); const hasItem = Boolean(item);
     $("emptySelection").hidden = hasItem; $("objectFields").hidden = !hasItem; $("deleteButton").hidden = !hasItem || item?.editor_kind === "floor";
@@ -484,6 +500,7 @@
   $("undoButton").onclick = undo; $("redoButton").onclick = redo; $("deleteButton").onclick = removeSelected; $("checkButton").onclick = runValidation;
   $("mapName").addEventListener("change", (event) => mutate(() => { spec.map_name = Core.slug(event.target.value); }));
   $("gridSize").addEventListener("change", (event) => mutate(() => { Core.snapSpecToGrid(spec, Number(event.target.value)); }));
+  $("materialTheme").addEventListener("change", (event) => mutate(() => { Core.applyMaterialTheme(spec, event.target.value); }));
   [["spawnX", 0], ["spawnY", 1]].forEach(([id, index]) => $(id).addEventListener("change", (event) => mutate(() => { spec.spawns.ct.origin[index] = Core.snap(Number(event.target.value), Number(spec.sketch_settings.grid)); })));
   $("spawnYaw").addEventListener("change", (event) => mutate(() => { spec.spawns.ct.angles[1] = ((Number(event.target.value) % 360) + 360) % 360; }));
   [["centerX", "center", 0], ["centerY", "center", 1], ["sizeX", "size", 0], ["sizeY", "size", 1], ["sizeZ", "size", 2]].forEach(([id, field, index]) => $(id).addEventListener("change", (event) => mutate(() => {

@@ -1,6 +1,9 @@
 (function (root, factory) {
   const api = factory();
-  if (typeof module === "object" && module.exports) module.exports = api;
+  if (typeof module === "object" && module.exports) {
+    api.configureMaterialThemes(require("./material-themes.json"));
+    module.exports = api;
+  }
   root.MapSketchCore = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
@@ -18,15 +21,81 @@
   const SUPPORTABLE_KINDS = new Set(["wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "jump"]);
   const SOLID_KINDS = new Set([...GENERATOR_KINDS, "stairs", "jump"]);
   const DEFAULT_GRID = 32;
+  const LEGACY_CUSTOM_THEME = "legacy_custom";
+  let materialThemeRegistry = {
+    schema_version: 1,
+    default_theme: "blockout",
+    themes: [{
+      id: "blockout", label: "Blockout", description: "Neutral development material.",
+      materials: Object.fromEntries([...RECT_KINDS].map((kind) => [kind, MATERIAL])),
+    }],
+  };
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
+  function configureMaterialThemes(registry) {
+    if (!registry || registry.schema_version !== 1 || !Array.isArray(registry.themes) || !registry.themes.length) throw new Error("Invalid material-theme registry.");
+    const ids = new Set();
+    registry.themes.forEach((theme) => {
+      if (!/^[a-z0-9_]+$/.test(theme.id) || ids.has(theme.id)) throw new Error(`Invalid or duplicate material theme: ${theme.id}.`);
+      ids.add(theme.id);
+      RECT_KINDS.forEach((kind) => {
+        const material = theme.materials?.[kind];
+        if (typeof material !== "string" || !material.startsWith("materials/") || !material.endsWith(".vmat")) throw new Error(`${theme.id} has no valid ${kind} material.`);
+      });
+    });
+    if (!ids.has(registry.default_theme)) throw new Error("Material-theme registry has no valid default theme.");
+    materialThemeRegistry = clone(registry);
+  }
+
+  function materialThemes() { return clone(materialThemeRegistry.themes); }
+  function themeById(themeId) { return materialThemeRegistry.themes.find((theme) => theme.id === themeId) || null; }
+  function materialForKind(themeId, editorKind, fallback = MATERIAL) { return themeById(themeId)?.materials?.[editorKind] || fallback; }
+  function themeMaterialList(themeId) {
+    const theme = themeById(themeId);
+    return theme ? [...new Set(Object.values(theme.materials))] : [];
+  }
+
+  function applyMaterialTheme(spec, themeId) {
+    const theme = themeById(themeId);
+    if (!theme) throw new Error(`Unknown material theme: ${themeId}.`);
+    spec.material_theme = themeId;
+    spec.allowed_materials = themeMaterialList(themeId);
+    allElements(spec).forEach((item) => { item.material = materialForKind(themeId, item.editor_kind); });
+    return spec;
+  }
+
+  function inferMaterialTheme(spec) {
+    if (spec.material_theme === LEGACY_CUSTOM_THEME || themeById(spec.material_theme)) return spec.material_theme;
+    const elements = [...(spec.geometry || []), ...(spec.sketch_elements || [])];
+    const match = materialThemeRegistry.themes.find((theme) => elements.every((item) => item.material === theme.materials[item.editor_kind]));
+    return match?.id || LEGACY_CUSTOM_THEME;
+  }
+
+  function themeValidation(spec) {
+    if (spec.material_theme === LEGACY_CUSTOM_THEME) return { errors: [], warnings: ["Imported custom materials are preserved. Select a stock map theme to replace them."] };
+    const theme = themeById(spec.material_theme);
+    if (!theme) return { errors: [`Unknown material theme: ${spec.material_theme}.`], warnings: [] };
+    const errors = [];
+    const expectedAllowed = new Set(themeMaterialList(theme.id));
+    const actualAllowed = new Set(spec.allowed_materials || []);
+    if (expectedAllowed.size !== actualAllowed.size || [...expectedAllowed].some((path) => !actualAllowed.has(path))) errors.push(`Allowed materials do not match the ${theme.label} theme.`);
+    allElements(spec).forEach((item) => {
+      const expected = materialForKind(theme.id, item.editor_kind, null);
+      if (!expected) errors.push(`${item.name} has no ${theme.label} material mapping.`);
+      else if (item.material !== expected) errors.push(`${item.name} does not use the ${theme.label} ${item.editor_kind} material.`);
+    });
+    return { errors, warnings: [] };
+  }
+
   function defaultSpec() {
-    return {
+    const defaultTheme = materialThemeRegistry.default_theme;
+    const spec = {
       schema_version: 1,
       sketch_schema_version: 3,
       design_approved: false,
       map_name: "research_1v1_generated",
+      material_theme: defaultTheme,
       symmetry: { mode: "rotation", center: [0, 0] },
       fixture_roles: {
         cuboid_node_id: 5,
@@ -34,11 +103,11 @@
         t_spawn_node_id: 12,
         preserve_entity_node_ids: [16, 23, 33, 36],
       },
-      allowed_materials: [MATERIAL],
+      allowed_materials: themeMaterialList(defaultTheme),
       geometry: [{
         name: "arena_floor", center: [0, 0, -32], size: [2048, 1280, 64],
         base_z: -64, supported_by: null,
-        material: MATERIAL, mirror: false, editor_kind: "floor",
+        material: materialForKind(defaultTheme, "floor"), mirror: false, editor_kind: "floor",
       }],
       sketch_elements: [],
       sketch_annotations: [],
@@ -48,6 +117,7 @@
       },
       sketch_settings: { grid: DEFAULT_GRID, view_width: 2560, view_height: 1792 },
     };
+    return spec;
   }
 
   function rotatePoint(point, center) {
@@ -147,6 +217,7 @@
   function findAnnotation(spec, name) { return (spec.sketch_annotations || []).find((item) => item.name === name) || null; }
 
   function addElement(spec, item) {
+    item.material ||= materialForKind(spec.material_theme, item.editor_kind, spec.allowed_materials?.[0] || MATERIAL);
     item.base_z = itemBaseZ(item);
     item.supported_by = typeof item.supported_by === "string" && item.supported_by ? item.supported_by : null;
     item.center[2] = cleanNumber(item.base_z + item.size[2] / 2);
@@ -241,7 +312,7 @@
   function normalizeRect(item, spec) {
     item.editor_kind ||= item.name === "arena_floor" ? "floor" : "cover";
     if (!RECT_KINDS.has(item.editor_kind)) item.editor_kind = "cover";
-    item.material ||= spec.allowed_materials[0];
+    item.material ||= materialForKind(spec.material_theme, item.editor_kind, spec.allowed_materials[0]);
     item.center = [Number(item.center?.[0] || 0), Number(item.center?.[1] || 0), Number(item.center?.[2] || 0)];
     item.size = [Number(item.size?.[0] || 32), Number(item.size?.[1] || 32), Number(item.size?.[2] || 32)];
     item.base_z = typeof item.base_z === "number" && Number.isFinite(item.base_z) ? item.base_z : item.center[2] - item.size[2] / 2;
@@ -266,6 +337,7 @@
     spec.sketch_schema_version = 3;
     spec.design_approved = false;
     spec.allowed_materials = Array.isArray(spec.allowed_materials) && spec.allowed_materials.length ? spec.allowed_materials : [MATERIAL];
+    spec.material_theme = inferMaterialTheme(spec);
     spec.sketch_elements = Array.isArray(spec.sketch_elements) ? spec.sketch_elements : [];
     spec.sketch_annotations = Array.isArray(spec.sketch_annotations) ? spec.sketch_annotations : [];
     spec.sketch_settings = Object.assign({ grid: DEFAULT_GRID, view_width: 2560, view_height: 1792 }, spec.sketch_settings);
@@ -285,6 +357,7 @@
 
   function validateDraft(spec) {
     const errors = []; const warnings = []; const names = new Set();
+    const themeReport = themeValidation(spec); errors.push(...themeReport.errors); warnings.push(...themeReport.warnings);
     if (!/^[a-z0-9_]+$/.test(spec.map_name)) errors.push("Map name must use lowercase letters, numbers, and underscores.");
     if (!spec.geometry.some((item) => item.editor_kind === "floor")) errors.push("Add a floor before generating the map.");
     allNamed(spec).forEach((item) => {
@@ -339,7 +412,8 @@
   }
 
   return {
-    MATERIAL, DEFAULT_GRID, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, RAMP_DIRECTIONS, RAMP_OPPOSITES, SUPPORT_KINDS, SUPPORTABLE_KINDS, clone, defaultSpec,
+    MATERIAL, DEFAULT_GRID, LEGACY_CUSTOM_THEME, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, RAMP_DIRECTIONS, RAMP_OPPOSITES, SUPPORT_KINDS, SUPPORTABLE_KINDS, clone, defaultSpec,
+    configureMaterialThemes, materialThemes, themeById, materialForKind, themeMaterialList, applyMaterialTheme, inferMaterialTheme, themeValidation,
     rotatePoint, pairedSpawn, cleanNumber, snap, snapRectToGrid, snapSpecToGrid, slug, allElements, allNamed, uniqueName,
     findElement, findAnnotation, addElement, removeElement, moveElementBucket, itemBaseZ, itemTopZ, containsRect,
     supportCandidates, bestSupportFor, setSupport, resolveVerticalPlacement, expandedElements, solidIntersections,

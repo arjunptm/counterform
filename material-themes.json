@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "default_theme": "blockout",
+  "themes": [
+    {
+      "id": "blockout",
+      "label": "Blockout",
+      "description": "Neutral development material for layout and collision testing.",
+      "materials": {
+        "floor": "materials/dev/reflectivity_30.vmat",
+        "wall": "materials/dev/reflectivity_30.vmat",
+        "cover": "materials/dev/reflectivity_30.vmat",
+        "low_cover": "materials/dev/reflectivity_30.vmat",
+        "crate": "materials/dev/reflectivity_30.vmat",
+        "bridge": "materials/dev/reflectivity_30.vmat",
+        "elevated": "materials/dev/reflectivity_30.vmat",
+        "ramp": "materials/dev/reflectivity_30.vmat",
+        "stairs": "materials/dev/reflectivity_30.vmat",
+        "jump": "materials/dev/reflectivity_30.vmat",
+        "water_void": "materials/dev/reflectivity_30.vmat"
+      }
+    },
+    {
+      "id": "industrial",
+      "label": "Industrial",
+      "description": "Painted concrete, metal decking, and plywood construction materials.",
+      "materials": {
+        "floor": "materials/concrete/hr_c/hr_concrete_floor_001.vmat",
+        "wall": "materials/concrete/hr_c/hr_concrete_wall_001_painted.vmat",
+        "cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001_orange.vmat",
+        "low_cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001_orange.vmat",
+        "crate": "materials/wood/plywood02.vmat",
+        "bridge": "materials/metal/hr_metal/hr_metal_floor_001.vmat",
+        "elevated": "materials/concrete/hr_c/hr_concrete_floor_001.vmat",
+        "ramp": "materials/concrete/hr_c/hr_concrete_stair_001.vmat",
+        "stairs": "materials/concrete/hr_c/hr_concrete_stair_001.vmat",
+        "jump": "materials/concrete/hr_c/hr_concrete_stair_001.vmat",
+        "water_void": "materials/dev/reflectivity_30.vmat"
+      }
+    },
+    {
+      "id": "mediterranean",
+      "label": "Mediterranean",
+      "description": "Italian stone, plaster, tile, and weathered wood.",
+      "materials": {
+        "floor": "materials/cs_italy/stone/stone_tile_ground_1.vmat",
+        "wall": "materials/cs_italy/plaster/italy_plaster_01.vmat",
+        "cover": "materials/cs_italy/stone/italy_stone_cladding_01.vmat",
+        "low_cover": "materials/cs_italy/stone/italy_stone_cladding_01.vmat",
+        "crate": "materials/cs_italy/wood/wood_boards_worn_1.vmat",
+        "bridge": "materials/wood/planks/wood_planks_clean_01.vmat",
+        "elevated": "materials/cs_italy/stone/stone_tile_ground_1.vmat",
+        "ramp": "materials/cs_italy/italy_tile_stairs/italy_tile_stairs.vmat",
+        "stairs": "materials/cs_italy/italy_tile_stairs/italy_tile_stairs.vmat",
+        "jump": "materials/cs_italy/italy_tile_stairs/italy_tile_stairs.vmat",
+        "water_void": "materials/dev/reflectivity_30.vmat"
+      }
+    },
+    {
+      "id": "desert",
+      "label": "Desert",
+      "description": "Warm Anubis stone, sandstone, and timber surfaces.",
+      "materials": {
+        "floor": "materials/anubis/hr_stone_floor02_plaster02.vmat",
+        "wall": "materials/anubis/sandstone_wall01.vmat",
+        "cover": "materials/anubis/sandstone01.vmat",
+        "low_cover": "materials/anubis/sandstone01.vmat",
+        "crate": "materials/anubis/anubis_wood_planks01.vmat",
+        "bridge": "materials/anubis/anubis_wood_planks01.vmat",
+        "elevated": "materials/anubis/hr_stone_floor02_plaster02.vmat",
+        "ramp": "materials/anubis/sandstone01.vmat",
+        "stairs": "materials/anubis/sandstone01.vmat",
+        "jump": "materials/anubis/sandstone01.vmat",
+        "water_void": "materials/dev/reflectivity_30.vmat"
+      }
+    }
+  ]
+}
