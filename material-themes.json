@@ -91,6 +91,24 @@
         "jump": "materials/de_inferno/ground/inferno_stone_floor_04_red.vmat",
         "water_void": "materials/dev/reflectivity_30.vmat"
       }
+    },
+    {
+      "id": "competitive_arena",
+      "label": "Competitive Arena",
+      "description": "Clean orange, blue, and neutral surfaces for a readable competitive aim arena.",
+      "materials": {
+        "floor": "materials/concrete/hr_c/hr_concrete_floor_001.vmat",
+        "wall": "materials/concrete/hr_c/hr_concrete_wall_painted_001_orange.vmat",
+        "cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001_blue.vmat",
+        "low_cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_blue_light.vmat",
+        "crate": "materials/concrete/hr_c/hr_concrete_wall_painted_001_darkgrey.vmat",
+        "bridge": "materials/metal/hr_metal/hr_metal_floor_001_grey.vmat",
+        "elevated": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_blue.vmat",
+        "ramp": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
+        "stairs": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
+        "jump": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
+        "water_void": "materials/dev/reflectivity_30.vmat"
+      }
     }
   ]
 }
