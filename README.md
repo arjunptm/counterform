@@ -22,11 +22,13 @@ directly.
 The editor runs entirely in the browser. Designs are saved in local browser
 storage and can be exported or reopened as JSON. Its blockout palette includes
 cardinal-direction ramps with a validated fixed 2:1 run-to-rise slope.
-Map Sketcher also offers Blockout, Industrial, Mediterranean, Desert, and Classic Yard map
-themes. Each theme assigns curated stock CS2 materials by feature role; changing
-the theme re-themes the complete sketch while keeping the schematic canvas
-colors stable. Imported custom-material sketches are preserved until a stock
-theme is deliberately selected.
+Map Sketcher also offers eight map-wide stock themes: Blockout, Industrial,
+Mediterranean, Desert, Classic Yard, Competitive Arena, Vivid Arena, and
+Redline Arena. Each theme assigns curated stock CS2 materials by feature role;
+changing the theme re-themes the complete sketch while keeping the schematic
+canvas colors stable. A four-tile material collage helps compare each theme
+before applying it. Imported custom-material sketches are preserved until a
+stock theme is deliberately selected.
 Schema-v3 sketches also expose base elevation and explicit named placement on
 floors, bridges, and raised regions, with embedded-solid detection before a
 design can build.

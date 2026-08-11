@@ -109,6 +109,42 @@
         "jump": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
         "water_void": "materials/dev/reflectivity_30.vmat"
       }
+    },
+    {
+      "id": "vivid_arena",
+      "label": "Vivid Arena",
+      "description": "Flat vivid orange structures, alternate blue cover, and neutral competitive surfaces.",
+      "materials": {
+        "floor": "materials/concrete/hr_c/hr_concrete_floor_001.vmat",
+        "wall": "materials/pbr_defaults/default_orange001.vmat",
+        "cover": "materials/concrete/hr_c/hr_concrete_wall_painted_002_blue.vmat",
+        "low_cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001_blue_light.vmat",
+        "crate": "materials/concrete/hr_c/hr_concrete_wall_painted_001_darkgrey.vmat",
+        "bridge": "materials/metal/hr_metal/hr_metal_floor_001.vmat",
+        "elevated": "materials/concrete/hr_c/hr_concrete_wall_painted_002_blue.vmat",
+        "ramp": "materials/pbr_defaults/default_orange001.vmat",
+        "stairs": "materials/pbr_defaults/default_orange001.vmat",
+        "jump": "materials/pbr_defaults/default_orange001.vmat",
+        "water_void": "materials/dev/reflectivity_30.vmat"
+      }
+    },
+    {
+      "id": "redline_arena",
+      "label": "Redline Arena",
+      "description": "Saturated red-orange structures, deep blue cover, and neutral competitive surfaces.",
+      "materials": {
+        "floor": "materials/concrete/hr_c/hr_concrete_floor_001.vmat",
+        "wall": "materials/concrete/hr_c/hr_concrete_wall_painted_001_red.vmat",
+        "cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001_blue.vmat",
+        "low_cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_blue.vmat",
+        "crate": "materials/concrete/hr_c/hr_concrete_wall_painted_001_darkgrey.vmat",
+        "bridge": "materials/metal/hr_metal/hr_metal_floor_001.vmat",
+        "elevated": "materials/concrete/hr_c/hr_concrete_wall_painted_001_blue.vmat",
+        "ramp": "materials/concrete/hr_c/hr_concrete_wall_painted_001_red.vmat",
+        "stairs": "materials/concrete/hr_c/hr_concrete_wall_painted_001_red.vmat",
+        "jump": "materials/concrete/hr_c/hr_concrete_wall_painted_001_red.vmat",
+        "water_void": "materials/dev/reflectivity_30.vmat"
+      }
     }
   ]
 }

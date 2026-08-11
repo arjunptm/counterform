@@ -371,6 +371,10 @@
     $("materialTheme").value = spec.material_theme;
     const theme = Core.themeById(spec.material_theme);
     $("themeDescription").textContent = theme?.description || "These imported materials stay unchanged until you select a stock theme.";
+    const previewRoles = { floor: "Floor", wall: "Wall", cover: "Cover", ramp: "Ramp" };
+    $("themePreview").innerHTML = theme ? Object.entries(previewRoles).map(([kind, label]) =>
+      `<figure><img src="assets/theme-previews/${theme.id}-${kind}.png" alt="${theme.label} ${label.toLowerCase()} material preview"><figcaption>${label}</figcaption></figure>`
+    ).join("") : '<span class="legacy-theme-preview">No stock preview for imported materials</span>';
     const roleLabels = { floor: "Floor", wall: "Walls", cover: "Cover", crate: "Crates", bridge: "Bridges", ramp: "Ramps" };
     $("themeRoles").innerHTML = theme ? Object.entries(roleLabels).map(([kind, label]) => {
       const path = theme.materials[kind]; const filename = path.split("/").pop().replace(/\.vmat$/, "");
