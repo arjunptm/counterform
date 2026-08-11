@@ -92,7 +92,11 @@
           </div>
           <div id="supportFields"><label>Placed on<select id="supportSelect"></select></label><p class="muted" id="supportNote">Base elevation is derived from the selected surface.</p></div>
           <div id="rampFields" hidden>
-            <label>Ramp ascent<select id="rampAscent"><option value="x+">+X</option><option value="x-">-X</option><option value="y+">+Y</option><option value="y-">-Y</option></select></label>
+            <label><span id="ascentLabel">Ramp ascent</span><select id="rampAscent"><option value="x+">+X</option><option value="x-">-X</option><option value="y+">+Y</option><option value="y-">-Y</option></select></label>
+          </div>
+          <div id="stairFields" hidden>
+            <label>Step count<input id="stairStepCount" type="number" min="1" max="64" step="1"></label>
+            <small id="stairProfile"></small>
           </div>
           <div class="selection-actions" id="rectActions"><button id="rotateButton" class="button ghost">Rotate 90°</button><button id="duplicateButton" class="button ghost">Duplicate</button></div>
           <div class="pair-note"><span class="pair-swatch"></span><div><strong id="pairTitle">Paired by rotation</strong><small id="pairPosition">Partner at X 0, Y 0</small></div></div>

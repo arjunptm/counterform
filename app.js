@@ -328,10 +328,10 @@
     for (let axis = 0; axis < 2; axis++) if (end[axis] === start[axis]) end[axis] += point[axis === 0 ? "x" : "y"] < start[axis] ? -grid : grid;
     const size = [Math.max(grid, Math.abs(end[0] - start[0])), Math.max(grid, Math.abs(end[1] - start[1])), presets[tool].height];
     let ascent;
-    if (tool === "ramp") {
+    if (["ramp", "stairs"].includes(tool)) {
       const runAxis = size[0] >= size[1] ? 0 : 1;
       ascent = `${runAxis === 0 ? "x" : "y"}${end[runAxis] >= start[runAxis] ? "+" : "-"}`;
-      size[2] = size[runAxis] / 2;
+      if (tool === "ramp") size[2] = size[runAxis] / 2;
     }
     const center = [Core.cleanNumber((start[0] + end[0]) / 2), Core.cleanNumber((start[1] + end[1]) / 2), size[2] / 2];
     let baseZ = tool === "water_void" ? -presets[tool].height : 0;
@@ -340,6 +340,7 @@
       material: Core.materialForKind(spec.material_theme, tool, spec.allowed_materials[0]), mirror: center[0] !== 0 || center[1] !== 0, editor_kind: tool,
       walkable_below: ["bridge", "elevated", "ramp", "stairs", "jump"].includes(tool) ? false : undefined,
       ascent,
+      step_count: tool === "stairs" ? 8 : undefined,
     };
     if (Core.SUPPORTABLE_KINDS.has(tool)) {
       gesture.preview.supported_by = Core.bestSupportFor(spec, gesture.preview);
@@ -397,7 +398,8 @@
       const rect = Boolean(item.center); $("selectionTitle").textContent = rect ? "Selected feature" : "Selected annotation";
       $("typeBadge").textContent = labels[item.editor_kind] || item.editor_kind; $("objectName").value = item.name;
       $("rectFields").hidden = !rect; $("rectActions").hidden = !rect;
-      $("rampFields").hidden = !rect || item.editor_kind !== "ramp";
+      $("rampFields").hidden = !rect || !["ramp", "stairs"].includes(item.editor_kind);
+      $("stairFields").hidden = !rect || item.editor_kind !== "stairs";
       const supportable = rect && Core.SUPPORTABLE_KINDS.has(item.editor_kind);
       $("supportFields").hidden = !supportable;
       const generatorReady = rect && Core.GENERATOR_KINDS.has(item.editor_kind);
@@ -414,11 +416,27 @@
           $("supportSelect").value = item.supported_by || "";
           $("supportNote").textContent = item.supported_by ? `Attached to ${item.supported_by}; base elevation follows its top surface.` : "Custom elevation is an unattached numeric height. Only surfaces containing this feature's footprint are listed.";
         }
-        if (item.editor_kind === "ramp") $("rampAscent").value = item.ascent;
+        if (["ramp", "stairs"].includes(item.editor_kind)) {
+          $("rampAscent").value = item.ascent;
+          $("ascentLabel").textContent = item.editor_kind === "stairs" ? "Stair ascent" : "Ramp ascent";
+        }
+        if (item.editor_kind === "stairs") {
+          $("stairStepCount").value = item.step_count;
+          const runAxis = item.ascent.startsWith("x") ? 0 : 1;
+          const tread = item.size[runAxis] / item.step_count;
+          const riser = item.size[2] / item.step_count;
+          $("stairProfile").textContent = `${tread} unit tread · ${riser} unit riser`;
+        }
         const pair = Core.rotatePoint(item.center, spec.symmetry.center); $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered feature"; $("pairPosition").textContent = item.mirror ? `Partner at X ${pair[0]}, Y ${pair[1]}` : "This feature builds once at the rotation center.";
       } else { $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered annotation"; $("pairPosition").textContent = item.mirror ? "The opposite annotation is locked." : "This annotation is invariant under rotation."; }
       $("surfaceNote").hidden = !["elevated", "bridge", "ramp", "stairs", "jump"].includes(item.editor_kind);
       if (item.editor_kind === "ramp") $("surfaceNote").textContent = "Solid 2:1 ramp: the run must remain exactly twice the rise.";
+      else if (item.editor_kind === "stairs") {
+        const riser = item.size[2] / item.step_count;
+        $("surfaceNote").textContent = riser > Core.MAX_WALKABLE_RISER
+          ? `Jump-required stairs: ${riser} unit risers exceed the ${Core.MAX_WALKABLE_RISER} unit ordinary-walking threshold. Bot traversal is not established.`
+          : `Literal walking stairs: ${riser} unit risers are within the ${Core.MAX_WALKABLE_RISER} unit ordinary-walking threshold.`;
+      }
       else $("surfaceNote").textContent = "Single walkable surface: no playable space is expected underneath this feature.";
     }
     const sources = Core.allElements(spec).length; const built = Core.allElements(spec).reduce((sum, item) => sum + (item.mirror ? 2 : 1), 0);
@@ -531,13 +549,17 @@
   $("baseZ").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item?.center || item.supported_by) return; item.base_z = Core.snap(Number(event.target.value), 16); }));
   $("supportSelect").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item?.center) return; Core.setSupport(spec, item, event.target.value || null); }));
   $("rampAscent").addEventListener("change", (event) => mutate(() => {
-    const item = selectedItem(); if (item?.editor_kind !== "ramp" || !Core.RAMP_DIRECTIONS.has(event.target.value)) return;
+    const item = selectedItem(); if (!item || !["ramp", "stairs"].includes(item.editor_kind) || !Core.RAMP_DIRECTIONS.has(event.target.value)) return;
     const oldAxis = item.ascent.startsWith("x") ? 0 : 1; const newAxis = event.target.value.startsWith("x") ? 0 : 1;
     if (oldAxis !== newAxis) [item.size[0], item.size[1]] = [item.size[1], item.size[0]];
     item.ascent = event.target.value;
   }));
+  $("stairStepCount").addEventListener("change", (event) => mutate(() => {
+    const item = selectedItem(); if (item?.editor_kind !== "stairs") return;
+    item.step_count = Math.max(1, Math.min(64, Math.round(Number(event.target.value))));
+  }));
   $("objectName").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!item) return; const previous = item.name; item.name = Core.uniqueName(spec, event.target.value, item.name); Core.allElements(spec).forEach((candidate) => { if (candidate.supported_by === previous) candidate.supported_by = item.name; }); selection.name = item.name; }));
-  $("rotateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.size) return; [item.size[0], item.size[1]] = [item.size[1], item.size[0]]; if (item.editor_kind === "ramp") item.ascent = { "x+": "y+", "y+": "x-", "x-": "y-", "y-": "x+" }[item.ascent]; });
+  $("rotateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.size) return; [item.size[0], item.size[1]] = [item.size[1], item.size[0]]; if (["ramp", "stairs"].includes(item.editor_kind)) item.ascent = { "x+": "y+", "y+": "x-", "x-": "y-", "y-": "x+" }[item.ascent]; });
   $("duplicateButton").onclick = () => mutate(() => { const item = selectedItem(); if (!item?.center || item.editor_kind === "floor") return; const copy = Core.clone(item); copy.name = Core.uniqueName(spec, `${item.name}_copy`); const grid = Number(spec.sketch_settings.grid); copy.center[0] += grid; copy.center[1] += grid; copy.mirror = copy.center[0] !== 0 || copy.center[1] !== 0; Core.addElement(spec, copy); selection = { type: "element", name: copy.name }; selectedPair = false; });
   $("exportButton").onclick = () => { const data = JSON.stringify(Core.exportSpec(spec), null, 2) + "\n"; const blob = new Blob([data], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${spec.map_name}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 0); };
   $("fileInput").addEventListener("change", async (event) => { const file = event.target.files[0]; if (!file) return; try { const loaded = Core.normalizeSpec(JSON.parse(await file.text())); remember(); spec = loaded; selection = null; selectedPair = false; zoom = 1; pan = { x: 0, y: 0 }; commit(); runValidation(); } catch (error) { alert(`Could not open design: ${error.message}`); } event.target.value = ""; });

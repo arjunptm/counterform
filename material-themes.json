@@ -123,7 +123,7 @@
         "bridge": "materials/metal/hr_metal/hr_metal_floor_001.vmat",
         "elevated": "materials/concrete/hr_c/hr_concrete_wall_painted_002_blue.vmat",
         "ramp": "materials/pbr_defaults/default_orange001.vmat",
-        "stairs": "materials/pbr_defaults/default_orange001.vmat",
+        "stairs": "materials/metal/hr_metal/hr_metal_floor_001.vmat",
         "jump": "materials/pbr_defaults/default_orange001.vmat",
         "water_void": "materials/dev/reflectivity_30.vmat"
       }

@@ -10,11 +10,12 @@
   "use strict";
 
   const MATERIAL = "materials/dev/reflectivity_30.vmat";
-  const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp"]);
+  const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs"]);
   const RECT_KINDS = new Set([...GENERATOR_KINDS, "water_void", "stairs", "jump"]);
   const ANNOTATION_KINDS = new Set(["measure", "sightline"]);
   const RAMP_DIRECTIONS = new Set(["x+", "x-", "y+", "y-"]);
   const RAMP_OPPOSITES = { "x+": "x-", "x-": "x+", "y+": "y-", "y-": "y+" };
+  const MAX_WALKABLE_RISER = 18;
   // Any generated cuboid with a horizontal top can be an explicit support.
   // Sloped/stepped features are intentionally excluded because one top-Z value
   // cannot describe their walking surface.
@@ -339,9 +340,13 @@
     item.supported_by = typeof item.supported_by === "string" && item.supported_by ? slug(item.supported_by) : null;
     if (item.editor_kind === "floor") item.supported_by = null;
     item.center[2] = cleanNumber(item.base_z + item.size[2] / 2);
-    if (item.editor_kind === "ramp") {
+    if (["ramp", "stairs"].includes(item.editor_kind)) {
       item.ascent = RAMP_DIRECTIONS.has(item.ascent) ? item.ascent : item.size[0] >= item.size[1] ? "x+" : "y+";
     } else delete item.ascent;
+    if (item.editor_kind === "stairs") {
+      item.step_count = Number.isInteger(item.step_count) && item.step_count > 0
+        ? item.step_count : Math.max(1, Math.round(item.size[2] / 16));
+    } else delete item.step_count;
     const atCenter = item.center[0] === spec.symmetry.center[0] && item.center[1] === spec.symmetry.center[1];
     item.mirror = item.editor_kind === "floor" ? false : !atCenter;
     if (["elevated", "bridge", "stairs", "jump", "ramp"].includes(item.editor_kind)) item.walkable_below = false;
@@ -410,6 +415,19 @@
         }
         if (item.walkable_below !== false) errors.push(`${item.name} must be a solid ramp.`);
       }
+      if (item.editor_kind === "stairs") {
+        if (!RAMP_DIRECTIONS.has(item.ascent)) errors.push(`${item.name} has an invalid stair ascent direction.`);
+        if (!Number.isInteger(item.step_count) || item.step_count < 1 || item.step_count > 64) errors.push(`${item.name} step count must be an integer from 1 to 64.`);
+        else {
+          const runAxis = item.ascent?.startsWith("x") ? 0 : 1;
+          const tread = Number(item.size[runAxis]) / item.step_count;
+          const riser = Number(item.size[2]) / item.step_count;
+          if (tread < 16 || tread > 64 || tread % 8 !== 0) errors.push(`${item.name} tread depth must be an 8-unit increment from 16 to 64.`);
+          if (riser < 8 || riser > 64 || riser % 8 !== 0) errors.push(`${item.name} riser height must be an 8-unit increment from 8 to 64.`);
+          else if (riser > MAX_WALKABLE_RISER) warnings.push(`${item.name} has ${riser}-unit risers above the ${MAX_WALKABLE_RISER}-unit ordinary-walking threshold; players will need jumps or another traversal method, and bot traversal is not established.`);
+        }
+        if (item.walkable_below !== false) errors.push(`${item.name} must be solid literal stairs.`);
+      }
     });
     const supportEdges = new Map(allElements(spec).map((item) => [item.name, item.supported_by]));
     for (const item of allElements(spec)) {
@@ -434,7 +452,7 @@
   }
 
   return {
-    MATERIAL, DEFAULT_GRID, LEGACY_CUSTOM_THEME, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, RAMP_DIRECTIONS, RAMP_OPPOSITES, SUPPORT_KINDS, SUPPORTABLE_KINDS, clone, defaultSpec,
+    MATERIAL, DEFAULT_GRID, LEGACY_CUSTOM_THEME, MAX_WALKABLE_RISER, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, RAMP_DIRECTIONS, RAMP_OPPOSITES, SUPPORT_KINDS, SUPPORTABLE_KINDS, clone, defaultSpec,
     configureMaterialThemes, materialThemes, themeById, materialForKind, themeMaterialList, applyMaterialTheme, inferMaterialTheme, themeValidation,
     configureEnvironmentPresets, environmentPresets, environmentPresetById,
     rotatePoint, pairedSpawn, cleanNumber, snap, snapRectToGrid, snapSpecToGrid, slug, allElements, allNamed, uniqueName,
