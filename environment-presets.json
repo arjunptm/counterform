@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "default_preset": "controlled_daylight",
+  "presets": [
+    {
+      "id": "neutral",
+      "label": "Neutral baseline",
+      "description": "The immutable starter lighting: white direct light at brightness 1.0.",
+      "light_environment": {
+        "color": "255 255 255",
+        "brightness": "1.0"
+      }
+    },
+    {
+      "id": "controlled_daylight",
+      "label": "Controlled daylight",
+      "description": "Accepted warm daylight for readable research arenas without changing sky, exposure, or sun direction.",
+      "light_environment": {
+        "color": "255 244 224 255",
+        "brightness": "1.2"
+      }
+    }
+  ]
+}

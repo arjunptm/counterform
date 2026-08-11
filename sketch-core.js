@@ -2,6 +2,7 @@
   const api = factory();
   if (typeof module === "object" && module.exports) {
     api.configureMaterialThemes(require("./material-themes.json"));
+    api.configureEnvironmentPresets(require("./environment-presets.json"));
     module.exports = api;
   }
   root.MapSketchCore = api;
@@ -30,6 +31,11 @@
       materials: Object.fromEntries([...RECT_KINDS].map((kind) => [kind, MATERIAL])),
     }],
   };
+  let environmentPresetRegistry = {
+    schema_version: 1,
+    default_preset: "controlled_daylight",
+    presets: [{ id: "controlled_daylight", label: "Controlled daylight", description: "Accepted warm research-arena daylight." }],
+  };
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
@@ -55,6 +61,19 @@
     const theme = themeById(themeId);
     return theme ? [...new Set(Object.values(theme.materials))] : [];
   }
+
+  function configureEnvironmentPresets(registry) {
+    if (!registry || registry.schema_version !== 1 || !Array.isArray(registry.presets) || !registry.presets.length) throw new Error("Invalid environment-preset registry.");
+    const ids = new Set();
+    registry.presets.forEach((preset) => {
+      if (!/^[a-z0-9_]+$/.test(preset.id) || ids.has(preset.id)) throw new Error(`Invalid or duplicate environment preset: ${preset.id}.`);
+      ids.add(preset.id);
+    });
+    if (!ids.has(registry.default_preset)) throw new Error("Environment-preset registry has no valid default.");
+    environmentPresetRegistry = clone(registry);
+  }
+  function environmentPresets() { return clone(environmentPresetRegistry.presets); }
+  function environmentPresetById(id) { return environmentPresetRegistry.presets.find((preset) => preset.id === id) || null; }
 
   function applyMaterialTheme(spec, themeId) {
     const theme = themeById(themeId);
@@ -96,6 +115,7 @@
       design_approved: false,
       map_name: "research_1v1_generated",
       material_theme: defaultTheme,
+      environment_preset: environmentPresetRegistry.default_preset,
       symmetry: { mode: "rotation", center: [0, 0] },
       fixture_roles: {
         cuboid_node_id: 5,
@@ -338,6 +358,7 @@
     spec.design_approved = false;
     spec.allowed_materials = Array.isArray(spec.allowed_materials) && spec.allowed_materials.length ? spec.allowed_materials : [MATERIAL];
     spec.material_theme = inferMaterialTheme(spec);
+    spec.environment_preset = environmentPresetById(spec.environment_preset)?.id || environmentPresetRegistry.default_preset;
     spec.sketch_elements = Array.isArray(spec.sketch_elements) ? spec.sketch_elements : [];
     spec.sketch_annotations = Array.isArray(spec.sketch_annotations) ? spec.sketch_annotations : [];
     spec.sketch_settings = Object.assign({ grid: DEFAULT_GRID, view_width: 2560, view_height: 1792 }, spec.sketch_settings);
@@ -358,6 +379,7 @@
   function validateDraft(spec) {
     const errors = []; const warnings = []; const names = new Set();
     const themeReport = themeValidation(spec); errors.push(...themeReport.errors); warnings.push(...themeReport.warnings);
+    if (!environmentPresetById(spec.environment_preset)) errors.push(`Unknown environment preset: ${spec.environment_preset}.`);
     if (!/^[a-z0-9_]+$/.test(spec.map_name)) errors.push("Map name must use lowercase letters, numbers, and underscores.");
     if (!spec.geometry.some((item) => item.editor_kind === "floor")) errors.push("Add a floor before generating the map.");
     allNamed(spec).forEach((item) => {
@@ -414,6 +436,7 @@
   return {
     MATERIAL, DEFAULT_GRID, LEGACY_CUSTOM_THEME, GENERATOR_KINDS, RECT_KINDS, ANNOTATION_KINDS, RAMP_DIRECTIONS, RAMP_OPPOSITES, SUPPORT_KINDS, SUPPORTABLE_KINDS, clone, defaultSpec,
     configureMaterialThemes, materialThemes, themeById, materialForKind, themeMaterialList, applyMaterialTheme, inferMaterialTheme, themeValidation,
+    configureEnvironmentPresets, environmentPresets, environmentPresetById,
     rotatePoint, pairedSpawn, cleanNumber, snap, snapRectToGrid, snapSpecToGrid, slug, allElements, allNamed, uniqueName,
     findElement, findAnnotation, addElement, removeElement, moveElementBucket, itemBaseZ, itemTopZ, containsRect,
     supportCandidates, bestSupportFor, setSupport, resolveVerticalPlacement, expandedElements, solidIntersections,

@@ -29,6 +29,11 @@ changing the theme re-themes the complete sketch while keeping the schematic
 canvas colors stable. A four-tile material collage helps compare each theme
 before applying it. Imported custom-material sketches are preserved until a
 stock theme is deliberately selected.
+
+The independent Environment selector offers the original neutral baseline and
+the accepted Controlled daylight preset. Exported sketches retain that choice;
+the local compiler also adds one ground-navigation seed beneath each team spawn
+when producing a Hammer VMAP.
 Schema-v3 sketches also expose base elevation and explicit named placement on
 floors, bridges, and raised regions, with embedded-solid detection before a
 design can build.

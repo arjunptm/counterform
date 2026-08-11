@@ -8,6 +8,13 @@
   } catch (error) {
     console.error("Could not load stock material themes; using Blockout only.", error);
   }
+  try {
+    const response = await fetch("environment-presets.json", { cache: "no-cache" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    Core.configureEnvironmentPresets(await response.json());
+  } catch (error) {
+    console.error("Could not load environment presets; using Controlled daylight.", error);
+  }
   const STORAGE_KEY = "counterform.sketch.v3";
   const LEGACY_STORAGE_KEYS = ["counterform.sketch.v2", "counterform.sketch.v1"];
   const $ = (id) => document.getElementById(id);
@@ -369,6 +376,9 @@
     const themes = Core.materialThemes();
     $("materialTheme").innerHTML = (spec.material_theme === Core.LEGACY_CUSTOM_THEME ? '<option value="legacy_custom">Imported materials</option>' : "") + themes.map((theme) => `<option value="${theme.id}">${theme.label}</option>`).join("");
     $("materialTheme").value = spec.material_theme;
+    $("environmentPreset").innerHTML = Core.environmentPresets().map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join("");
+    $("environmentPreset").value = spec.environment_preset;
+    $("environmentDescription").textContent = Core.environmentPresetById(spec.environment_preset)?.description || "";
     const theme = Core.themeById(spec.material_theme);
     $("themeDescription").textContent = theme?.description || "These imported materials stay unchanged until you select a stock theme.";
     const previewRoles = { floor: "Floor", wall: "Wall", cover: "Cover", ramp: "Ramp" };
@@ -505,6 +515,7 @@
   $("mapName").addEventListener("change", (event) => mutate(() => { spec.map_name = Core.slug(event.target.value); }));
   $("gridSize").addEventListener("change", (event) => mutate(() => { Core.snapSpecToGrid(spec, Number(event.target.value)); }));
   $("materialTheme").addEventListener("change", (event) => mutate(() => { Core.applyMaterialTheme(spec, event.target.value); }));
+  $("environmentPreset").addEventListener("change", (event) => mutate(() => { spec.environment_preset = event.target.value; }));
   [["spawnX", 0], ["spawnY", 1]].forEach(([id, index]) => $(id).addEventListener("change", (event) => mutate(() => { spec.spawns.ct.origin[index] = Core.snap(Number(event.target.value), Number(spec.sketch_settings.grid)); })));
   $("spawnYaw").addEventListener("change", (event) => mutate(() => { spec.spawns.ct.angles[1] = ((Number(event.target.value) % 360) + 360) % 360; }));
   [["centerX", "center", 0], ["centerY", "center", 1], ["sizeX", "size", 0], ["sizeY", "size", 1], ["sizeZ", "size", 2]].forEach(([id, field, index]) => $(id).addEventListener("change", (event) => mutate(() => {
