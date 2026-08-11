@@ -102,7 +102,7 @@
         "cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001_blue.vmat",
         "low_cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_blue_light.vmat",
         "crate": "materials/concrete/hr_c/hr_concrete_wall_painted_001_darkgrey.vmat",
-        "bridge": "materials/metal/hr_metal/hr_metal_floor_001_grey.vmat",
+        "bridge": "materials/metal/hr_metal/hr_metal_floor_001.vmat",
         "elevated": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_blue.vmat",
         "ramp": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
         "stairs": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
