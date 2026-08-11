@@ -27,9 +27,9 @@
       "materials": {
         "floor": "materials/concrete/hr_c/hr_concrete_floor_001.vmat",
         "wall": "materials/concrete/hr_c/hr_concrete_wall_001_painted.vmat",
-        "cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001_orange.vmat",
-        "low_cover": "materials/concrete/hr_c/hr_concrete_wall_painted_001_orange.vmat",
-        "crate": "materials/wood/plywood02.vmat",
+        "cover": "materials/concrete/hr_c/hr_concrete_wall_001.vmat",
+        "low_cover": "materials/concrete/hr_c/hr_concrete_wall_001b.vmat",
+        "crate": "materials/models/props/de_nuke/hr_nuke/metal_crate_001/metal_crate_001.vmat",
         "bridge": "materials/metal/hr_metal/hr_metal_floor_001.vmat",
         "elevated": "materials/concrete/hr_c/hr_concrete_floor_001.vmat",
         "ramp": "materials/concrete/hr_c/hr_concrete_stair_001.vmat",
@@ -46,11 +46,11 @@
         "floor": "materials/cs_italy/stone/stone_tile_ground_1.vmat",
         "wall": "materials/cs_italy/plaster/italy_plaster_01.vmat",
         "cover": "materials/cs_italy/stone/italy_stone_cladding_01.vmat",
-        "low_cover": "materials/cs_italy/stone/italy_stone_cladding_01.vmat",
-        "crate": "materials/cs_italy/wood/wood_boards_worn_1.vmat",
+        "low_cover": "materials/cs_italy/stone/italy_stone_wall_01.vmat",
+        "crate": "materials/cs_italy/picrate1.vmat",
         "bridge": "materials/wood/planks/wood_planks_clean_01.vmat",
         "elevated": "materials/cs_italy/stone/stone_tile_ground_1.vmat",
-        "ramp": "materials/cs_italy/italy_tile_stairs/italy_tile_stairs.vmat",
+        "ramp": "materials/cs_italy/stone/sidewalk_stone_tiles_01.vmat",
         "stairs": "materials/cs_italy/italy_tile_stairs/italy_tile_stairs.vmat",
         "jump": "materials/cs_italy/italy_tile_stairs/italy_tile_stairs.vmat",
         "water_void": "materials/dev/reflectivity_30.vmat"
@@ -62,15 +62,33 @@
       "description": "Warm Anubis stone, sandstone, and timber surfaces.",
       "materials": {
         "floor": "materials/anubis/hr_stone_floor02_plaster02.vmat",
-        "wall": "materials/anubis/sandstone_wall01.vmat",
+        "wall": "materials/anubis/hr_plaster_wall01_wall02.vmat",
         "cover": "materials/anubis/sandstone01.vmat",
-        "low_cover": "materials/anubis/sandstone01.vmat",
-        "crate": "materials/anubis/anubis_wood_planks01.vmat",
+        "low_cover": "materials/anubis/sandstone_wall03a.vmat",
+        "crate": "materials/models/props/de_dust/hr_dust/dust_crates/dust_shipping_crate_01_wood_color.vmat",
         "bridge": "materials/anubis/anubis_wood_planks01.vmat",
         "elevated": "materials/anubis/hr_stone_floor02_plaster02.vmat",
         "ramp": "materials/anubis/sandstone01.vmat",
         "stairs": "materials/anubis/sandstone01.vmat",
         "jump": "materials/anubis/sandstone01.vmat",
+        "water_void": "materials/dev/reflectivity_30.vmat"
+      }
+    },
+    {
+      "id": "classic_yard",
+      "label": "Classic Yard",
+      "description": "Green grass, red-brown masonry, and weathered wood inspired by classic aim-map yards.",
+      "materials": {
+        "floor": "materials/nature/hr_c/hr_grass_dirt_blend_001.vmat",
+        "wall": "materials/de_inferno/brick/inferno_brick_02.vmat",
+        "cover": "materials/de_inferno/brick/inferno_brick_01.vmat",
+        "low_cover": "materials/de_inferno/brick/inferno_brick_03.vmat",
+        "crate": "materials/models/props/crates/wcrate_64x64.vmat",
+        "bridge": "materials/wood/planks/wood_planks_worn_01.vmat",
+        "elevated": "materials/nature/hr_c/hr_grass_dirt_blend_001.vmat",
+        "ramp": "materials/de_inferno/ground/inferno_stone_floor_04_red.vmat",
+        "stairs": "materials/de_inferno/ground/inferno_stone_floor_04_red.vmat",
+        "jump": "materials/de_inferno/ground/inferno_stone_floor_04_red.vmat",
         "water_void": "materials/dev/reflectivity_30.vmat"
       }
     }

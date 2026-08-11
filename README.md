@@ -22,7 +22,7 @@ directly.
 The editor runs entirely in the browser. Designs are saved in local browser
 storage and can be exported or reopened as JSON. Its blockout palette includes
 cardinal-direction ramps with a validated fixed 2:1 run-to-rise slope.
-Map Sketcher also offers Blockout, Industrial, Mediterranean, and Desert map
+Map Sketcher also offers Blockout, Industrial, Mediterranean, Desert, and Classic Yard map
 themes. Each theme assigns curated stock CS2 materials by feature role; changing
 the theme re-themes the complete sketch while keeping the schematic canvas
 colors stable. Imported custom-material sketches are preserved until a stock
