@@ -25,20 +25,20 @@
   const presets = {
     wall: { height: 192, base: "wall" }, cover: { height: 96, base: "cover" },
     low_cover: { height: 48, base: "low_cover" }, crate: { height: 128, base: "crate" },
-    water: { height: 64, base: "water" }, void: { height: 128, base: "void" }, bridge: { height: 16, base: "bridge" },
+    bridge: { height: 16, base: "bridge" },
     elevated: { height: 128, base: "raised_region" }, ramp: { height: 128, base: "ramp" }, stairs: { height: 128, base: "stairs" },
     jump: { height: 64, base: "jump_platform" },
     blocked_zone: { height: 384, base: "blocked_zone" },
   };
   const labels = {
     floor: "Floor", wall: "Wall", cover: "Standing cover", low_cover: "Crouch cover",
-    crate: "Crate", water: "Water", void: "Void", bridge: "Bridge", elevated: "Elevated region",
+    crate: "Crate", water_void: "Shelved water / void", bridge: "Bridge", elevated: "Elevated region",
     ramp: "Ramp", stairs: "Stairs", blocked_zone: "Blocked zone", jump: "Jump platform", measure: "Measurement", sightline: "Sightline",
   };
   const visuals = {
     floor: ["rgba(67,78,70,.33)", "#475149"], wall: ["rgba(240,164,74,.34)", "#f0a44a"],
     cover: ["rgba(232,237,233,.25)", "#aab5ad"], low_cover: ["rgba(167,180,171,.20)", "#89958d"],
-    crate: ["rgba(174,112,55,.42)", "#c98649"], water: ["rgba(55,135,180,.40)", "#54a8d1"], void: ["rgba(24,19,32,.72)", "#9875c5"],
+    crate: ["rgba(174,112,55,.42)", "#c98649"], water_void: ["rgba(55,135,180,.40)", "#54a8d1"],
     bridge: ["rgba(139,93,52,.50)", "#c8945a"], elevated: ["rgba(210,174,69,.22)", "#d6b54e"],
     ramp: ["rgba(101,163,119,.30)", "#79c98e"], stairs: ["rgba(218,183,77,.28)", "#e0c05c"], jump: ["rgba(157,100,209,.28)", "#b783e7"],
     blocked_zone: ["rgba(245,82,110,.20)", "#f5526e"],
@@ -46,7 +46,7 @@
   const lightVisuals = {
     floor: ["rgba(67,78,70,.12)", "#65736a"], wall: ["rgba(184,91,0,.18)", "#9a4d00"],
     cover: ["rgba(58,75,64,.14)", "#3e5044"], low_cover: ["rgba(76,94,82,.12)", "#526759"],
-    crate: ["rgba(154,82,21,.20)", "#88450d"], water: ["rgba(15,111,160,.18)", "#0b6793"], void: ["rgba(65,42,84,.18)", "#60417a"],
+    crate: ["rgba(154,82,21,.20)", "#88450d"], water_void: ["rgba(15,111,160,.18)", "#0b6793"],
     bridge: ["rgba(137,76,22,.18)", "#7f4616"], elevated: ["rgba(145,108,0,.17)", "#765900"],
     ramp: ["rgba(27,120,57,.16)", "#1b7438"], stairs: ["rgba(137,99,0,.17)", "#705300"], jump: ["rgba(105,52,151,.15)", "#693397"],
     blocked_zone: ["rgba(185,28,58,.12)", "#b91c3a"],
@@ -177,7 +177,7 @@
   function drawPattern(item, rect) {
     ctx.save(); ctx.strokeStyle = objectVisuals(item.editor_kind)[1]; ctx.globalAlpha = document.documentElement.dataset.theme === "light" ? .78 : .55; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
-    if (item.editor_kind === "water") {
+    if (item.editor_kind === "water_void") {
       for (let y = rect.y + 8; y < rect.y + rect.h; y += 12) { ctx.beginPath(); ctx.moveTo(rect.x + 5, y); ctx.bezierCurveTo(rect.x + rect.w * .3, y - 4, rect.x + rect.w * .7, y + 4, rect.x + rect.w - 5, y); ctx.stroke(); }
     } else if (item.editor_kind === "blocked_zone") {
       ctx.setLineDash([5, 4]); for (let x = rect.x - rect.h; x < rect.x + rect.w; x += 12) { ctx.beginPath(); ctx.moveTo(x, rect.y + rect.h); ctx.lineTo(x + rect.h, rect.y); ctx.stroke(); }
@@ -255,7 +255,7 @@
   }
 
   function orderedElements() {
-    const rank = { floor: 0, water: 1, void: 1, elevated: 2, bridge: 3, stairs: 4, jump: 5 };
+    const rank = { floor: 0, water_void: 1, elevated: 2, bridge: 3, stairs: 4, jump: 5 };
     return Core.allElements(spec).slice().sort((a, b) => (rank[a.editor_kind] ?? 10) - (rank[b.editor_kind] ?? 10));
   }
 
@@ -339,7 +339,7 @@
       if (tool === "ramp") size[2] = size[runAxis] / 2;
     }
     const center = [Core.cleanNumber((start[0] + end[0]) / 2), Core.cleanNumber((start[1] + end[1]) / 2), size[2] / 2];
-    let baseZ = 0;
+    let baseZ = tool === "water_void" ? -presets[tool].height : 0;
     gesture.preview = {
       name: "new", center, size, base_z: baseZ, supported_by: null,
       material: Core.materialForKind(spec.material_theme, tool, spec.allowed_materials[0]), mirror: center[0] !== 0 || center[1] !== 0, editor_kind: tool,
@@ -347,9 +347,6 @@
       ascent,
       step_count: tool === "stairs" ? 8 : undefined,
       vertical_mode: tool === "blocked_zone" ? "containment" : undefined,
-      depth: ["water", "void"].includes(tool) ? size[2] : undefined,
-      access: tool === "water" ? "enterable" : undefined,
-      behavior: tool === "void" ? "open" : undefined,
     };
     if (Core.SUPPORTABLE_KINDS.has(tool)) {
       gesture.preview.supported_by = Core.bestSupportFor(spec, gesture.preview);
@@ -410,8 +407,6 @@
       $("rampFields").hidden = !rect || !["ramp", "stairs"].includes(item.editor_kind);
       $("stairFields").hidden = !rect || item.editor_kind !== "stairs";
       $("blockedZoneFields").hidden = !rect || item.editor_kind !== "blocked_zone";
-      $("apertureFields").hidden = !rect || !["water", "void"].includes(item.editor_kind);
-      $("voidBehaviorLabel").hidden = item.editor_kind !== "void";
       const supportable = rect && Core.SUPPORTABLE_KINDS.has(item.editor_kind);
       $("supportFields").hidden = !supportable;
       const generatorReady = rect && Core.GENERATOR_KINDS.has(item.editor_kind);
@@ -421,7 +416,6 @@
         $("baseZ").disabled = Boolean(item.supported_by);
         $("sizeZ").disabled = item.editor_kind === "blocked_zone" && item.vertical_mode === "containment";
         if (item.editor_kind === "blocked_zone") $("blockedZoneMode").value = item.vertical_mode || "containment";
-        if (["water", "void"].includes(item.editor_kind)) { $("apertureDepth").value = item.depth; $("voidBehavior").value = item.behavior || "open"; }
         if (supportable) {
           const supports = Core.supportCandidates(spec, item);
           $("supportSelect").innerHTML = '<option value="">Custom elevation (not attached)</option>' + supports.map((candidate) => {
@@ -575,8 +569,6 @@
     item.vertical_mode = event.target.value;
     if (item.vertical_mode === "finite") item.height = item.size[2]; else delete item.height;
   }));
-  $("apertureDepth").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (!["water", "void"].includes(item?.editor_kind)) return; item.depth = Math.max(16, Math.min(256, Core.snap(Number(event.target.value), 16))); item.size[2] = item.depth; }));
-  $("voidBehavior").addEventListener("change", (event) => mutate(() => { const item = selectedItem(); if (item?.editor_kind === "void") item.behavior = event.target.value; }));
   $("stairStepCount").addEventListener("change", (event) => mutate(() => {
     const item = selectedItem(); if (item?.editor_kind !== "stairs") return;
     item.step_count = Math.max(1, Math.min(64, Math.round(Number(event.target.value))));
@@ -594,7 +586,7 @@
     if (event.key === "Delete" || event.key === "Backspace") removeSelected();
     else if (event.key === "Escape" || event.key.toLowerCase() === "v") setTool("select");
     else if (event.ctrlKey && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
-    else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", i: "water", o: "void", g: "bridge", e: "elevated", p: "ramp", r: "stairs", z: "blocked_zone", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
+    else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", g: "bridge", e: "elevated", p: "ramp", r: "stairs", z: "blocked_zone", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
   });
   document.addEventListener("keyup", (event) => { if (event.code === "Space") { spacePressed = false; if (gesture?.type !== "pan-view") canvas.style.cursor = panMode ? "grab" : tool === "select" ? "default" : "crosshair"; } });
   window.addEventListener("counterform-theme-change", draw);

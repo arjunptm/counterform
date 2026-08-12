@@ -37,8 +37,6 @@
       <button class="tool" data-tool="cover" title="Draw standing cover (C)"><b>C</b><small>Cover</small></button>
       <button class="tool" data-tool="low_cover" title="Draw crouch-height cover (L)"><b>L</b><small>Low</small></button>
       <button class="tool" data-tool="crate" title="Draw crate blockout (B)"><b>B</b><small>Crate</small></button>
-      <button class="tool" data-tool="water" title="Draw enterable water aperture (I)"><b>I</b><small>Water</small></button>
-      <button class="tool" data-tool="void" title="Draw open/lethal void aperture (O)"><b>O</b><small>Void</small></button>
       <button class="tool" data-tool="bridge" title="Draw bridge (G)"><b>G</b><small>Bridge</small></button>
       <button class="tool" data-tool="elevated" title="Draw single-surface elevated region (E)"><b>E</b><small>Raised</small></button>
       <button class="tool" data-tool="ramp" title="Draw solid 2:1 ramp (P)"><b>P</b><small>Ramp</small></button>
@@ -79,7 +77,7 @@
         <div class="two-col"><label>Grid<select id="gridSize"><option>16</option><option selected>32</option><option>64</option><option>128</option></select></label><label>Map theme<select id="materialTheme"></select></label></div>
         <label>Environment<select id="environmentPreset"></select></label>
         <small id="environmentDescription"></small>
-        <div class="material-theme-summary"><p id="themeDescription"></p><div id="themePreview" class="theme-preview" aria-live="polite"></div><div id="themeRoles" class="theme-roles"></div><small>Preview crops come from the stock CS2 materials. Water / void remains a blockout marker.</small></div>
+        <div class="material-theme-summary"><p id="themeDescription"></p><div id="themePreview" class="theme-preview" aria-live="polite"></div><div id="themeRoles" class="theme-roles"></div><small>Preview crops come from stock CS2 materials.</small></div>
       </section>
 
       <section class="panel" id="objectPanel">
@@ -103,11 +101,6 @@
           <div id="blockedZoneFields" hidden>
             <label>Vertical extent<select id="blockedZoneMode"><option value="containment">To containment top</option><option value="finite">Finite height</option></select></label>
             <p class="muted">Finite blockers must end flush beneath containing solid geometry so their invisible top is unreachable.</p>
-          </div>
-          <div id="apertureFields" hidden>
-            <label>Depth (16–256)<input id="apertureDepth" type="number" min="16" max="256" step="16"></label>
-            <label id="voidBehaviorLabel">Void behavior<select id="voidBehavior"><option value="open">Open</option><option value="lethal">Lethal</option></select></label>
-            <p class="muted">Water is enterable. Overlay an independent Blocked zone to forbid either footprint.</p>
           </div>
           <div class="selection-actions" id="rectActions"><button id="rotateButton" class="button ghost">Rotate 90°</button><button id="duplicateButton" class="button ghost">Duplicate</button></div>
           <div class="pair-note"><span class="pair-swatch"></span><div><strong id="pairTitle">Paired by rotation</strong><small id="pairPosition">Partner at X 0, Y 0</small></div></div>
