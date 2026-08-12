@@ -28,11 +28,12 @@
     water_void: { height: 8, base: "water" }, bridge: { height: 16, base: "bridge" },
     elevated: { height: 128, base: "raised_region" }, ramp: { height: 128, base: "ramp" }, stairs: { height: 128, base: "stairs" },
     jump: { height: 64, base: "jump_platform" },
+    blocked_zone: { height: 384, base: "blocked_zone" },
   };
   const labels = {
     floor: "Floor", wall: "Wall", cover: "Standing cover", low_cover: "Crouch cover",
     crate: "Crate", water_void: "Water / void", bridge: "Bridge", elevated: "Elevated region",
-    ramp: "Ramp", stairs: "Stairs", jump: "Jump platform", measure: "Measurement", sightline: "Sightline",
+    ramp: "Ramp", stairs: "Stairs", blocked_zone: "Blocked zone", jump: "Jump platform", measure: "Measurement", sightline: "Sightline",
   };
   const visuals = {
     floor: ["rgba(67,78,70,.33)", "#475149"], wall: ["rgba(240,164,74,.34)", "#f0a44a"],
@@ -40,6 +41,7 @@
     crate: ["rgba(174,112,55,.42)", "#c98649"], water_void: ["rgba(55,135,180,.40)", "#54a8d1"],
     bridge: ["rgba(139,93,52,.50)", "#c8945a"], elevated: ["rgba(210,174,69,.22)", "#d6b54e"],
     ramp: ["rgba(101,163,119,.30)", "#79c98e"], stairs: ["rgba(218,183,77,.28)", "#e0c05c"], jump: ["rgba(157,100,209,.28)", "#b783e7"],
+    blocked_zone: ["rgba(245,82,110,.20)", "#f5526e"],
   };
   const lightVisuals = {
     floor: ["rgba(67,78,70,.12)", "#65736a"], wall: ["rgba(184,91,0,.18)", "#9a4d00"],
@@ -47,6 +49,7 @@
     crate: ["rgba(154,82,21,.20)", "#88450d"], water_void: ["rgba(15,111,160,.18)", "#0b6793"],
     bridge: ["rgba(137,76,22,.18)", "#7f4616"], elevated: ["rgba(145,108,0,.17)", "#765900"],
     ramp: ["rgba(27,120,57,.16)", "#1b7438"], stairs: ["rgba(137,99,0,.17)", "#705300"], jump: ["rgba(105,52,151,.15)", "#693397"],
+    blocked_zone: ["rgba(185,28,58,.12)", "#b91c3a"],
   };
 
   function themeColor(name, fallback) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback; }
@@ -176,6 +179,8 @@
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
     if (item.editor_kind === "water_void") {
       for (let y = rect.y + 8; y < rect.y + rect.h; y += 12) { ctx.beginPath(); ctx.moveTo(rect.x + 5, y); ctx.bezierCurveTo(rect.x + rect.w * .3, y - 4, rect.x + rect.w * .7, y + 4, rect.x + rect.w - 5, y); ctx.stroke(); }
+    } else if (item.editor_kind === "blocked_zone") {
+      ctx.setLineDash([5, 4]); for (let x = rect.x - rect.h; x < rect.x + rect.w; x += 12) { ctx.beginPath(); ctx.moveTo(x, rect.y + rect.h); ctx.lineTo(x + rect.h, rect.y); ctx.stroke(); }
     } else if (item.editor_kind === "stairs") {
       const vertical = rect.h >= rect.w; const count = Math.max(2, Math.floor((vertical ? rect.h : rect.w) / 12));
       for (let i = 1; i < count; i++) { const t = i / count; ctx.beginPath(); if (vertical) { const y = rect.y + rect.h * t; ctx.moveTo(rect.x, y); ctx.lineTo(rect.x + rect.w, y); } else { const x = rect.x + rect.w * t; ctx.moveTo(x, rect.y); ctx.lineTo(x, rect.y + rect.h); } ctx.stroke(); }
@@ -341,6 +346,7 @@
       walkable_below: ["bridge", "elevated", "ramp", "stairs", "jump"].includes(tool) ? false : undefined,
       ascent,
       step_count: tool === "stairs" ? 8 : undefined,
+      vertical_mode: tool === "blocked_zone" ? "containment" : undefined,
     };
     if (Core.SUPPORTABLE_KINDS.has(tool)) {
       gesture.preview.supported_by = Core.bestSupportFor(spec, gesture.preview);
@@ -400,6 +406,7 @@
       $("rectFields").hidden = !rect; $("rectActions").hidden = !rect;
       $("rampFields").hidden = !rect || !["ramp", "stairs"].includes(item.editor_kind);
       $("stairFields").hidden = !rect || item.editor_kind !== "stairs";
+      $("blockedZoneFields").hidden = !rect || item.editor_kind !== "blocked_zone";
       const supportable = rect && Core.SUPPORTABLE_KINDS.has(item.editor_kind);
       $("supportFields").hidden = !supportable;
       const generatorReady = rect && Core.GENERATOR_KINDS.has(item.editor_kind);
@@ -407,6 +414,8 @@
       if (rect) {
         ["centerX", "centerY"].forEach((id, i) => $(id).value = item.center[i]); $("baseZ").value = Core.itemBaseZ(item); ["sizeX", "sizeY", "sizeZ"].forEach((id, i) => $(id).value = item.size[i]);
         $("baseZ").disabled = Boolean(item.supported_by);
+        $("sizeZ").disabled = item.editor_kind === "blocked_zone" && item.vertical_mode === "containment";
+        if (item.editor_kind === "blocked_zone") $("blockedZoneMode").value = item.vertical_mode || "containment";
         if (supportable) {
           const supports = Core.supportCandidates(spec, item);
           $("supportSelect").innerHTML = '<option value="">Custom elevation (not attached)</option>' + supports.map((candidate) => {
@@ -429,7 +438,7 @@
         }
         const pair = Core.rotatePoint(item.center, spec.symmetry.center); $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered feature"; $("pairPosition").textContent = item.mirror ? `Partner at X ${pair[0]}, Y ${pair[1]}` : "This feature builds once at the rotation center.";
       } else { $("pairTitle").textContent = item.mirror ? "Paired by rotation" : "Centered annotation"; $("pairPosition").textContent = item.mirror ? "The opposite annotation is locked." : "This annotation is invariant under rotation."; }
-      $("surfaceNote").hidden = !["elevated", "bridge", "ramp", "stairs", "jump"].includes(item.editor_kind);
+      $("surfaceNote").hidden = !["elevated", "bridge", "ramp", "stairs", "blocked_zone", "jump"].includes(item.editor_kind);
       if (item.editor_kind === "ramp") $("surfaceNote").textContent = "Solid 2:1 ramp: the run must remain exactly twice the rise.";
       else if (item.editor_kind === "stairs") {
         const riser = item.size[2] / item.step_count;
@@ -437,6 +446,7 @@
           ? `Jump-required stairs: ${riser} unit risers exceed the ${Core.MAX_WALKABLE_RISER} unit ordinary-walking threshold. Bot traversal is not established.`
           : `Literal walking stairs: ${riser} unit risers are within the ${Core.MAX_WALKABLE_RISER} unit ordinary-walking threshold.`;
       }
+      else if (item.editor_kind === "blocked_zone") $("surfaceNote").textContent = item.vertical_mode === "finite" ? "No-entry player/nav volume with a finite top that must be sealed by solid geometry." : "No-entry player/nav volume extending to the generated containment top.";
       else $("surfaceNote").textContent = "Single walkable surface: no playable space is expected underneath this feature.";
     }
     const sources = Core.allElements(spec).length; const built = Core.allElements(spec).reduce((sum, item) => sum + (item.mirror ? 2 : 1), 0);
@@ -539,7 +549,7 @@
   [["centerX", "center", 0], ["centerY", "center", 1], ["sizeX", "size", 0], ["sizeY", "size", 1], ["sizeZ", "size", 2]].forEach(([id, field, index]) => $(id).addEventListener("change", (event) => mutate(() => {
     const item = selectedItem(); if (!item?.center) return; const value = Number(event.target.value);
     if (index < 2) { item[field][index] = value; Core.snapRectToGrid(item, spec); }
-    else item[field][index] = field === "size" ? Math.max(16, Core.snap(value, 16)) : Core.snap(value, 16);
+    else { item[field][index] = field === "size" ? Math.max(16, Core.snap(value, 16)) : Core.snap(value, 16); if (item.editor_kind === "blocked_zone" && item.vertical_mode === "finite") item.height = item.size[2]; }
     if (item.editor_kind === "ramp" && field === "size") {
       const runAxis = item.ascent.startsWith("x") ? 0 : 1;
       if (index === 2) { item.size[runAxis] = 2 * item.size[2]; Core.snapRectToGrid(item, spec); }
@@ -553,6 +563,11 @@
     const oldAxis = item.ascent.startsWith("x") ? 0 : 1; const newAxis = event.target.value.startsWith("x") ? 0 : 1;
     if (oldAxis !== newAxis) [item.size[0], item.size[1]] = [item.size[1], item.size[0]];
     item.ascent = event.target.value;
+  }));
+  $("blockedZoneMode").addEventListener("change", (event) => mutate(() => {
+    const item = selectedItem(); if (item?.editor_kind !== "blocked_zone") return;
+    item.vertical_mode = event.target.value;
+    if (item.vertical_mode === "finite") item.height = item.size[2]; else delete item.height;
   }));
   $("stairStepCount").addEventListener("change", (event) => mutate(() => {
     const item = selectedItem(); if (item?.editor_kind !== "stairs") return;
@@ -571,7 +586,7 @@
     if (event.key === "Delete" || event.key === "Backspace") removeSelected();
     else if (event.key === "Escape" || event.key.toLowerCase() === "v") setTool("select");
     else if (event.ctrlKey && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
-    else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", i: "water_void", g: "bridge", e: "elevated", p: "ramp", r: "stairs", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
+    else { const shortcuts = { w: "wall", c: "cover", l: "low_cover", b: "crate", i: "water_void", g: "bridge", e: "elevated", p: "ramp", r: "stairs", z: "blocked_zone", j: "jump", s: "spawn", m: "measure", x: "sightline" }; if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]); }
   });
   document.addEventListener("keyup", (event) => { if (event.code === "Space") { spacePressed = false; if (gesture?.type !== "pan-view") canvas.style.cursor = panMode ? "grab" : tool === "select" ? "default" : "crosshair"; } });
   window.addEventListener("counterform-theme-change", draw);

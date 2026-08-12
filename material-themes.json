@@ -17,7 +17,8 @@
         "ramp": "materials/dev/reflectivity_30.vmat",
         "stairs": "materials/dev/reflectivity_30.vmat",
         "jump": "materials/dev/reflectivity_30.vmat",
-        "water_void": "materials/dev/reflectivity_30.vmat"
+        "water_void": "materials/dev/reflectivity_30.vmat",
+        "blocked_zone": "materials/tools/toolsplayerclip.vmat"
       }
     },
     {
@@ -35,7 +36,8 @@
         "ramp": "materials/concrete/hr_c/hr_concrete_stair_001.vmat",
         "stairs": "materials/concrete/hr_c/hr_concrete_stair_001.vmat",
         "jump": "materials/concrete/hr_c/hr_concrete_stair_001.vmat",
-        "water_void": "materials/dev/reflectivity_30.vmat"
+        "water_void": "materials/dev/reflectivity_30.vmat",
+        "blocked_zone": "materials/tools/toolsplayerclip.vmat"
       }
     },
     {
@@ -53,7 +55,8 @@
         "ramp": "materials/cs_italy/stone/sidewalk_stone_tiles_01.vmat",
         "stairs": "materials/cs_italy/italy_tile_stairs/italy_tile_stairs.vmat",
         "jump": "materials/cs_italy/italy_tile_stairs/italy_tile_stairs.vmat",
-        "water_void": "materials/dev/reflectivity_30.vmat"
+        "water_void": "materials/dev/reflectivity_30.vmat",
+        "blocked_zone": "materials/tools/toolsplayerclip.vmat"
       }
     },
     {
@@ -71,7 +74,8 @@
         "ramp": "materials/anubis/sandstone01.vmat",
         "stairs": "materials/anubis/sandstone01.vmat",
         "jump": "materials/anubis/sandstone01.vmat",
-        "water_void": "materials/dev/reflectivity_30.vmat"
+        "water_void": "materials/dev/reflectivity_30.vmat",
+        "blocked_zone": "materials/tools/toolsplayerclip.vmat"
       }
     },
     {
@@ -89,7 +93,8 @@
         "ramp": "materials/de_inferno/ground/inferno_stone_floor_04_red.vmat",
         "stairs": "materials/de_inferno/ground/inferno_stone_floor_04_red.vmat",
         "jump": "materials/de_inferno/ground/inferno_stone_floor_04_red.vmat",
-        "water_void": "materials/dev/reflectivity_30.vmat"
+        "water_void": "materials/dev/reflectivity_30.vmat",
+        "blocked_zone": "materials/tools/toolsplayerclip.vmat"
       }
     },
     {
@@ -107,7 +112,8 @@
         "ramp": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
         "stairs": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
         "jump": "materials/concrete/hr_c/hr_concrete_wall_painted_001b_orange.vmat",
-        "water_void": "materials/dev/reflectivity_30.vmat"
+        "water_void": "materials/dev/reflectivity_30.vmat",
+        "blocked_zone": "materials/tools/toolsplayerclip.vmat"
       }
     },
     {
@@ -125,7 +131,8 @@
         "ramp": "materials/pbr_defaults/default_orange001.vmat",
         "stairs": "materials/metal/hr_metal/hr_metal_floor_001.vmat",
         "jump": "materials/pbr_defaults/default_orange001.vmat",
-        "water_void": "materials/dev/reflectivity_30.vmat"
+        "water_void": "materials/dev/reflectivity_30.vmat",
+        "blocked_zone": "materials/tools/toolsplayerclip.vmat"
       }
     },
     {
@@ -143,7 +150,8 @@
         "ramp": "materials/concrete/hr_c/hr_concrete_wall_painted_001_red.vmat",
         "stairs": "materials/concrete/hr_c/hr_concrete_wall_painted_001_red.vmat",
         "jump": "materials/concrete/hr_c/hr_concrete_wall_painted_001_red.vmat",
-        "water_void": "materials/dev/reflectivity_30.vmat"
+        "water_void": "materials/dev/reflectivity_30.vmat",
+        "blocked_zone": "materials/tools/toolsplayerclip.vmat"
       }
     }
   ]

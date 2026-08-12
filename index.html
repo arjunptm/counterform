@@ -42,6 +42,7 @@
       <button class="tool" data-tool="elevated" title="Draw single-surface elevated region (E)"><b>E</b><small>Raised</small></button>
       <button class="tool" data-tool="ramp" title="Draw solid 2:1 ramp (P)"><b>P</b><small>Ramp</small></button>
       <button class="tool" data-tool="stairs" title="Draw stairs footprint (R)"><b>R</b><small>Stairs</small></button>
+      <button class="tool" data-tool="blocked_zone" title="Draw no-entry footprint (Z)"><b>Z</b><small>Blocked</small></button>
       <button class="tool" data-tool="jump" title="Draw jump-up platform (J)"><b>J</b><small>Jump</small></button>
       <button class="tool" data-tool="spawn" title="Place CT spawn (S)"><b>S</b><small>Spawn</small></button>
       <div class="tool-divider"></div>
@@ -97,6 +98,10 @@
           <div id="stairFields" hidden>
             <label>Step count<input id="stairStepCount" type="number" min="1" max="64" step="1"></label>
             <small id="stairProfile"></small>
+          </div>
+          <div id="blockedZoneFields" hidden>
+            <label>Vertical extent<select id="blockedZoneMode"><option value="containment">To containment top</option><option value="finite">Finite height</option></select></label>
+            <p class="muted">Finite blockers must end flush beneath containing solid geometry so their invisible top is unreachable.</p>
           </div>
           <div class="selection-actions" id="rectActions"><button id="rotateButton" class="button ghost">Rotate 90°</button><button id="duplicateButton" class="button ghost">Duplicate</button></div>
           <div class="pair-note"><span class="pair-swatch"></span><div><strong id="pairTitle">Paired by rotation</strong><small id="pairPosition">Partner at X 0, Y 0</small></div></div>

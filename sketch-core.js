@@ -10,7 +10,7 @@
   "use strict";
 
   const MATERIAL = "materials/dev/reflectivity_30.vmat";
-  const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs"]);
+  const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "blocked_zone"]);
   const RECT_KINDS = new Set([...GENERATOR_KINDS, "water_void", "stairs", "jump"]);
   const ANNOTATION_KINDS = new Set(["measure", "sightline"]);
   const RAMP_DIRECTIONS = new Set(["x+", "x-", "y+", "y-"]);
@@ -21,7 +21,7 @@
   // cannot describe their walking surface.
   const SUPPORT_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated"]);
   const SUPPORTABLE_KINDS = new Set(["wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "jump"]);
-  const SOLID_KINDS = new Set([...GENERATOR_KINDS, "stairs", "jump"]);
+  const SOLID_KINDS = new Set([...GENERATOR_KINDS].filter((kind) => kind !== "blocked_zone").concat(["stairs", "jump"]));
   const DEFAULT_GRID = 32;
   const LEGACY_CUSTOM_THEME = "legacy_custom";
   let materialThemeRegistry = {
@@ -60,7 +60,7 @@
   function materialForKind(themeId, editorKind, fallback = MATERIAL) { return themeById(themeId)?.materials?.[editorKind] || fallback; }
   function themeMaterialList(themeId) {
     const theme = themeById(themeId);
-    return theme ? [...new Set(Object.values(theme.materials))] : [];
+    return theme ? [...new Set(Object.entries(theme.materials).filter(([kind]) => kind !== "blocked_zone").map(([, material]) => material))] : [];
   }
 
   function configureEnvironmentPresets(registry) {
@@ -82,6 +82,7 @@
     spec.material_theme = themeId;
     spec.allowed_materials = themeMaterialList(themeId);
     allElements(spec).forEach((item) => { item.material = materialForKind(themeId, item.editor_kind); });
+    if (allElements(spec).some((item) => item.editor_kind === "blocked_zone")) spec.allowed_materials.push(materialForKind(themeId, "blocked_zone"));
     return spec;
   }
 
@@ -98,6 +99,7 @@
     if (!theme) return { errors: [`Unknown material theme: ${spec.material_theme}.`], warnings: [] };
     const errors = [];
     const expectedAllowed = new Set(themeMaterialList(theme.id));
+    if (allElements(spec).some((item) => item.editor_kind === "blocked_zone")) expectedAllowed.add(materialForKind(theme.id, "blocked_zone"));
     const actualAllowed = new Set(spec.allowed_materials || []);
     if (expectedAllowed.size !== actualAllowed.size || [...expectedAllowed].some((path) => !actualAllowed.has(path))) errors.push(`Allowed materials do not match the ${theme.label} theme.`);
     allElements(spec).forEach((item) => {
@@ -242,6 +244,7 @@
     item.base_z = itemBaseZ(item);
     item.supported_by = typeof item.supported_by === "string" && item.supported_by ? item.supported_by : null;
     item.center[2] = cleanNumber(item.base_z + item.size[2] / 2);
+    if (item.editor_kind === "blocked_zone" && !spec.allowed_materials.includes(item.material)) spec.allowed_materials.push(item.material);
     const target = GENERATOR_KINDS.has(item.editor_kind) ? spec.geometry : spec.sketch_elements;
     target.push(item); return item;
   }
@@ -339,6 +342,12 @@
     item.base_z = typeof item.base_z === "number" && Number.isFinite(item.base_z) ? item.base_z : item.center[2] - item.size[2] / 2;
     item.supported_by = typeof item.supported_by === "string" && item.supported_by ? slug(item.supported_by) : null;
     if (item.editor_kind === "floor") item.supported_by = null;
+    if (item.editor_kind === "blocked_zone") {
+      item.supported_by = null;
+      item.vertical_mode = ["finite", "containment"].includes(item.vertical_mode) ? item.vertical_mode : "containment";
+      if (item.vertical_mode === "finite") item.height = Number.isFinite(Number(item.height)) ? Number(item.height) : item.size[2];
+      else delete item.height;
+    } else { delete item.vertical_mode; delete item.height; }
     item.center[2] = cleanNumber(item.base_z + item.size[2] / 2);
     if (["ramp", "stairs"].includes(item.editor_kind)) {
       item.ascent = RAMP_DIRECTIONS.has(item.ascent) ? item.ascent : item.size[0] >= item.size[1] ? "x+" : "y+";
@@ -427,6 +436,17 @@
           else if (riser > MAX_WALKABLE_RISER) warnings.push(`${item.name} has ${riser}-unit risers above the ${MAX_WALKABLE_RISER}-unit ordinary-walking threshold; players will need jumps or another traversal method, and bot traversal is not established.`);
         }
         if (item.walkable_below !== false) errors.push(`${item.name} must be solid literal stairs.`);
+      }
+      if (item.editor_kind === "blocked_zone") {
+        if (!["finite", "containment"].includes(item.vertical_mode)) errors.push(`${item.name} must use finite or containment vertical mode.`);
+        if (item.supported_by) errors.push(`${item.name} cannot use a support.`);
+        if (item.vertical_mode === "finite" && (!Number.isFinite(item.height) || item.height <= 0)) errors.push(`${item.name} finite height must be positive.`);
+        else if (item.vertical_mode === "finite") {
+          if (cleanNumber(item.height) !== cleanNumber(item.size[2])) errors.push(`${item.name} finite height must match its height field.`);
+          const top = cleanNumber(itemBaseZ(item) + item.height);
+          const sealed = expandedElements(spec).some((solid) => solid.editor_kind !== "blocked_zone" && SOLID_KINDS.has(solid.editor_kind) && cleanNumber(itemBaseZ(solid)) === top && containsRect(solid, item));
+          if (!sealed) errors.push(`${item.name} finite top must terminate flush beneath containing solid geometry.`);
+        }
       }
     });
     const supportEdges = new Map(allElements(spec).map((item) => [item.name, item.supported_by]));
