@@ -10,7 +10,7 @@
   "use strict";
 
   const MATERIAL = "materials/dev/reflectivity_30.vmat";
-  const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "blocked_zone"]);
+  const GENERATOR_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "blocked_zone", "water", "void"]);
   const RECT_KINDS = new Set([...GENERATOR_KINDS, "water_void", "stairs", "jump"]);
   const ANNOTATION_KINDS = new Set(["measure", "sightline"]);
   const RAMP_DIRECTIONS = new Set(["x+", "x-", "y+", "y-"]);
@@ -20,8 +20,8 @@
   // Sloped/stepped features are intentionally excluded because one top-Z value
   // cannot describe their walking surface.
   const SUPPORT_KINDS = new Set(["floor", "wall", "cover", "low_cover", "crate", "bridge", "elevated"]);
-  const SUPPORTABLE_KINDS = new Set(["wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "jump"]);
-  const SOLID_KINDS = new Set([...GENERATOR_KINDS].filter((kind) => kind !== "blocked_zone").concat(["stairs", "jump"]));
+  const SUPPORTABLE_KINDS = new Set(["wall", "cover", "low_cover", "crate", "bridge", "elevated", "ramp", "stairs", "jump", "water", "void"]);
+  const SOLID_KINDS = new Set([...GENERATOR_KINDS].filter((kind) => !["blocked_zone", "water", "void"].includes(kind)).concat(["stairs", "jump"]));
   const DEFAULT_GRID = 32;
   const LEGACY_CUSTOM_THEME = "legacy_custom";
   let materialThemeRegistry = {
@@ -60,7 +60,7 @@
   function materialForKind(themeId, editorKind, fallback = MATERIAL) { return themeById(themeId)?.materials?.[editorKind] || fallback; }
   function themeMaterialList(themeId) {
     const theme = themeById(themeId);
-    return theme ? [...new Set(Object.entries(theme.materials).filter(([kind]) => kind !== "blocked_zone").map(([, material]) => material))] : [];
+    return theme ? [...new Set(Object.entries(theme.materials).filter(([kind]) => !["blocked_zone", "water", "void"].includes(kind)).map(([, material]) => material))] : [];
   }
 
   function configureEnvironmentPresets(registry) {
@@ -83,6 +83,7 @@
     spec.allowed_materials = themeMaterialList(themeId);
     allElements(spec).forEach((item) => { item.material = materialForKind(themeId, item.editor_kind); });
     if (allElements(spec).some((item) => item.editor_kind === "blocked_zone")) spec.allowed_materials.push(materialForKind(themeId, "blocked_zone"));
+    if (allElements(spec).some((item) => ["water", "void"].includes(item.editor_kind))) spec.allowed_materials.push(materialForKind(themeId, "water"), materialForKind(themeId, "void"));
     return spec;
   }
 
@@ -100,6 +101,7 @@
     const errors = [];
     const expectedAllowed = new Set(themeMaterialList(theme.id));
     if (allElements(spec).some((item) => item.editor_kind === "blocked_zone")) expectedAllowed.add(materialForKind(theme.id, "blocked_zone"));
+    if (allElements(spec).some((item) => ["water", "void"].includes(item.editor_kind))) { expectedAllowed.add(materialForKind(theme.id, "water")); expectedAllowed.add(materialForKind(theme.id, "void")); }
     const actualAllowed = new Set(spec.allowed_materials || []);
     if (expectedAllowed.size !== actualAllowed.size || [...expectedAllowed].some((path) => !actualAllowed.has(path))) errors.push(`Allowed materials do not match the ${theme.label} theme.`);
     allElements(spec).forEach((item) => {
@@ -348,6 +350,12 @@
       if (item.vertical_mode === "finite") item.height = Number.isFinite(Number(item.height)) ? Number(item.height) : item.size[2];
       else delete item.height;
     } else { delete item.vertical_mode; delete item.height; }
+    if (["water", "void"].includes(item.editor_kind)) {
+      item.depth = Number.isFinite(Number(item.depth)) ? Number(item.depth) : item.size[2];
+      item.size[2] = item.depth;
+      if (item.editor_kind === "water") { item.access = "enterable"; delete item.behavior; }
+      else { item.behavior = ["open", "lethal"].includes(item.behavior) ? item.behavior : "open"; delete item.access; }
+    } else { delete item.depth; delete item.access; delete item.behavior; }
     item.center[2] = cleanNumber(item.base_z + item.size[2] / 2);
     if (["ramp", "stairs"].includes(item.editor_kind)) {
       item.ascent = RAMP_DIRECTIONS.has(item.ascent) ? item.ascent : item.size[0] >= item.size[1] ? "x+" : "y+";
@@ -447,6 +455,12 @@
           const sealed = expandedElements(spec).some((solid) => solid.editor_kind !== "blocked_zone" && SOLID_KINDS.has(solid.editor_kind) && cleanNumber(itemBaseZ(solid)) === top && containsRect(solid, item));
           if (!sealed) errors.push(`${item.name} finite top must terminate flush beneath containing solid geometry.`);
         }
+      }
+      if (["water", "void"].includes(item.editor_kind)) {
+        if (!item.supported_by) errors.push(`${item.name} requires a named support.`);
+        if (!Number.isFinite(item.depth) || item.depth < 16 || item.depth > 256 || item.depth % 16) errors.push(`${item.name} depth must be a 16-unit increment from 16 to 256.`);
+        if (item.editor_kind === "water" && item.access !== "enterable") errors.push(`${item.name} must be enterable; overlay a blocked zone for no-entry water.`);
+        if (item.editor_kind === "void" && !["open", "lethal"].includes(item.behavior)) errors.push(`${item.name} must be open or lethal.`);
       }
     });
     const supportEdges = new Map(allElements(spec).map((item) => [item.name, item.supported_by]));
